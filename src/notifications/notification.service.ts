@@ -6,6 +6,8 @@ import { SupportRequest } from '../support/support-request.entity';
 import { User } from '../users/user.entity';
 import { TelegramApiService } from './telegram-api.service';
 
+const RESOLVE_SUPPORT_PREFIX = 'support:resolve:';
+
 @Injectable()
 export class NotificationService {
   constructor(
@@ -66,6 +68,16 @@ export class NotificationService {
         `tg://user?id=${request.user.telegramId}`,
       ].join('\n'),
       true,
+      {
+        inline_keyboard: [
+          [
+            {
+              text: '✅ Завершить',
+              callback_data: `${RESOLVE_SUPPORT_PREFIX}${request.id}`,
+            },
+          ],
+        ],
+      },
     );
   }
 
@@ -105,11 +117,17 @@ export class NotificationService {
     );
   }
 
-  private async sendAdminMessage(text: string, includeManager = false) {
+  private async sendAdminMessage(
+    text: string,
+    includeManager = false,
+    replyMarkup?: Record<string, unknown>,
+  ) {
     const recipients = this.getAdminRecipients(includeManager);
 
     await Promise.all(
-      recipients.map((chatId) => this.adminTelegram.sendMessage(chatId, text)),
+      recipients.map((chatId) =>
+        this.adminTelegram.sendMessage(chatId, text, replyMarkup),
+      ),
     );
   }
 

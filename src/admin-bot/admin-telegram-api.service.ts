@@ -31,6 +31,25 @@ export class AdminTelegramApiService {
     });
   }
 
+  async answerCallbackQuery(callbackQueryId: string, text?: string) {
+    return this.request('answerCallbackQuery', {
+      callback_query_id: callbackQueryId,
+      text,
+    });
+  }
+
+  async editMessageReplyMarkup(
+    chatId: string | number,
+    messageId: number,
+    replyMarkup?: TelegramMarkup,
+  ) {
+    return this.request('editMessageReplyMarkup', {
+      chat_id: chatId,
+      message_id: messageId,
+      reply_markup: replyMarkup,
+    });
+  }
+
   private async request<T = unknown>(
     method: string,
     payload: Record<string, unknown>,

@@ -15,6 +15,8 @@ import { UserActivityEvent } from '../user-activity/user-activity-event.entity';
 import { User } from '../users/user.entity';
 import { AdminTelegramApiService } from './admin-telegram-api.service';
 
+const RESOLVE_SUPPORT_PREFIX = 'support:resolve:';
+
 @Injectable()
 export class AdminBotService {
   private readonly adminIds: Set<string>;
@@ -44,6 +46,11 @@ export class AdminBotService {
   }
 
   async handleUpdate(update: TelegramUpdate) {
+    if (update.callback_query) {
+      await this.handleCallback(update.callback_query);
+      return;
+    }
+
     if (!update.message?.from || !update.message.text) {
       return;
     }
@@ -56,6 +63,42 @@ export class AdminBotService {
     }
 
     await this.handleMessage(message);
+  }
+
+  private async handleCallback(
+    callbackQuery: TelegramUpdate['callback_query'],
+  ) {
+    if (!callbackQuery) {
+      return;
+    }
+
+    const chatId = callbackQuery.message?.chat.id ?? callbackQuery.from.id;
+
+    if (!this.isAdmin(callbackQuery.from.id)) {
+      await this.telegram.answerCallbackQuery(
+        callbackQuery.id,
+        'Access denied.',
+      );
+      return;
+    }
+
+    const data = callbackQuery.data;
+    if (!data) {
+      await this.telegram.answerCallbackQuery(callbackQuery.id);
+      return;
+    }
+
+    if (data.startsWith(RESOLVE_SUPPORT_PREFIX)) {
+      await this.telegram.answerCallbackQuery(callbackQuery.id, 'Resolving...');
+      await this.resolveSupport(
+        chatId,
+        data.slice(RESOLVE_SUPPORT_PREFIX.length),
+        callbackQuery.message?.message_id,
+      );
+      return;
+    }
+
+    await this.telegram.answerCallbackQuery(callbackQuery.id);
   }
 
   private async handleMessage(message: TelegramMessage) {
@@ -324,23 +367,21 @@ export class AdminBotService {
 
     await this.telegram.sendMessage(
       chatId,
-      [
-        '<b>Open support requests</b>',
-        '',
-        ...requests.map((request) =>
-          [
-            `${this.formatDate(request.createdAt)} - ${this.escape(request.topic)}`,
-            `ID: <code>${this.escape(request.id)}</code>`,
-            `User: ${this.formatUser(request.user)}`,
-            `Telegram ID: <code>${this.escape(request.user.telegramId)}</code>`,
-            `Resolve: <code>/resolve_support ${this.escape(request.id)}</code>`,
-          ].join('\n'),
-        ),
-      ].join('\n\n'),
+      `<b>Open support requests:</b> ${requests.length}`,
+    );
+
+    await Promise.all(
+      requests.map((request) =>
+        this.sendSupportRequestMessage(chatId, request),
+      ),
     );
   }
 
-  private async resolveSupport(chatId: string | number, requestId?: string) {
+  private async resolveSupport(
+    chatId: string | number,
+    requestId?: string,
+    messageId?: number,
+  ) {
     if (!requestId) {
       await this.telegram.sendMessage(
         chatId,
@@ -371,6 +412,10 @@ export class AdminBotService {
     request.resolvedAt = new Date();
     await this.supportRequests.save(request);
 
+    if (messageId) {
+      await this.telegram.editMessageReplyMarkup(chatId, messageId);
+    }
+
     await this.telegram.sendMessage(
       chatId,
       [
@@ -382,6 +427,38 @@ export class AdminBotService {
         `Topic: ${this.escape(request.topic)}`,
       ].join('\n'),
     );
+  }
+
+  private async sendSupportRequestMessage(
+    chatId: string | number,
+    request: SupportRequest,
+  ) {
+    await this.telegram.sendMessage(
+      chatId,
+      this.formatSupportRequest(request),
+      {
+        inline_keyboard: [
+          [
+            {
+              text: '✅ Завершить',
+              callback_data: `${RESOLVE_SUPPORT_PREFIX}${request.id}`,
+            },
+          ],
+        ],
+      },
+    );
+  }
+
+  private formatSupportRequest(request: SupportRequest) {
+    return [
+      '💬 <b>Support request</b>',
+      '',
+      `${this.formatDate(request.createdAt)} - ${this.escape(request.topic)}`,
+      `ID: <code>${this.escape(request.id)}</code>`,
+      `User: ${this.formatUser(request.user)}`,
+      `Telegram ID: <code>${this.escape(request.user.telegramId)}</code>`,
+      `Resolve: <code>/resolve_support ${this.escape(request.id)}</code>`,
+    ].join('\n');
   }
 
   private async findUserOrReply(chatId: string | number, telegramId?: string) {

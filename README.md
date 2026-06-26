@@ -374,6 +374,14 @@ Available admin commands:
 /activity <telegram_id>
 ```
 
+`/support` sends each open support request as a separate message with a
+`✅ Завершить` inline button. The same button is included in new support
+notifications. The manual fallback command is:
+
+```text
+/resolve_support <request_id>
+```
+
 Internal notifications are also sent through the admin bot to
 `ADMIN_TELEGRAM_IDS`:
 
