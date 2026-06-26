@@ -42,7 +42,7 @@ export class ProductService implements OnModuleInit {
     product.title = 'The Cycle';
     product.description =
       'Женский клуб с поддержкой эксперта, материалами, эфирами и сообществом для бережного движения по своим циклам и этапам.';
-    product.price = product.price ?? '1500.00';
+    product.price = product.price ?? '1.00';
     product.currency = product.currency ?? 'UAH';
     product.isActive = true;
 
