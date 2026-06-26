@@ -5,6 +5,7 @@ import {
   OnApplicationShutdown,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { CriticalErrorService } from '../notifications/critical-error.service';
 import { TelegramApiService } from '../notifications/telegram-api.service';
 import { BotService } from './bot.service';
 
@@ -20,6 +21,7 @@ export class BotPollingService
     private readonly config: ConfigService,
     private readonly telegram: TelegramApiService,
     private readonly bot: BotService,
+    private readonly criticalErrors: CriticalErrorService,
   ) {}
 
   async onApplicationBootstrap() {
@@ -49,6 +51,11 @@ export class BotPollingService
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         this.logger.error(`Telegram polling failed: ${message}`);
+        await this.criticalErrors.notify({
+          source: 'customer-bot-polling',
+          message,
+          stack: error instanceof Error ? error.stack : undefined,
+        });
         await this.sleep(3000);
       }
     }

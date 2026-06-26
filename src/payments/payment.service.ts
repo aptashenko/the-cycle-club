@@ -248,6 +248,7 @@ export class PaymentService {
     } else {
       paymentAttempt.status = PaymentAttemptStatus.Failed;
       await this.paymentAttemptRepository.save(paymentAttempt);
+      await this.notifications.notifyPaymentFailed(paymentAttempt);
       await this.activity.track(
         paymentAttempt.user,
         'payment',

@@ -117,6 +117,43 @@ export class NotificationService {
     );
   }
 
+  async notifyPaymentFailed(paymentAttempt: PaymentAttempt) {
+    const payload = paymentAttempt.rawPayload ?? {};
+
+    await this.sendAdminMessage(
+      [
+        '❌ <b>Ошибка оплаты</b>',
+        '',
+        '<b>Пользователь:</b>',
+        this.formatUser(paymentAttempt.user),
+        '',
+        '<b>ID:</b>',
+        paymentAttempt.user.telegramId,
+        '',
+        '<b>Продукт:</b>',
+        paymentAttempt.product.title,
+        '',
+        '<b>Сумма:</b>',
+        `${paymentAttempt.amount} ${paymentAttempt.currency}`,
+        '',
+        '<b>Provider:</b>',
+        paymentAttempt.provider,
+        '',
+        '<b>Order:</b>',
+        paymentAttempt.providerOrderId,
+        '',
+        '<b>Status:</b>',
+        String(payload.transactionStatus ?? paymentAttempt.status),
+        '',
+        '<b>Reason code:</b>',
+        String(payload.reasonCode ?? '-'),
+        '',
+        '<b>Открыть пользователя:</b>',
+        `tg://user?id=${paymentAttempt.user.telegramId}`,
+      ].join('\n'),
+    );
+  }
+
   private async sendAdminMessage(
     text: string,
     includeManager = false,

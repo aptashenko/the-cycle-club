@@ -388,10 +388,14 @@ Internal notifications are also sent through the admin bot to
 - successful payments;
 - abandoned payments;
 - new support requests.
+- critical application errors.
 
 For support requests, `MANAGER_TELEGRAM_ID` is also included if configured.
 Each recipient must start the admin bot once before Telegram allows the bot to
 send direct messages.
+
+Critical alerts include unexpected 5xx HTTP/webhook errors, uncaught exceptions,
+unhandled promise rejections, and polling failures when polling mode is enabled.
 
 ## Production WayForPay Mode
 
