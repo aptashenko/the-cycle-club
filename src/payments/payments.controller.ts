@@ -54,11 +54,30 @@ export class PaymentsController {
   private normalizeWayForPayPayload(
     payload: WayForPayWebhookPayload | string,
   ): WayForPayWebhookPayload {
-    if (typeof payload !== 'string') {
+    if (typeof payload === 'string') {
+      return this.parseWayForPayPayloadString(payload);
+    }
+
+    if (payload.orderReference || payload.merchantSignature) {
       return payload;
     }
 
-    const trimmed = payload.trim();
+    const entries = Object.entries(payload);
+    if (entries.length === 1) {
+      const [key, value] = entries[0];
+
+      if (typeof value === 'string' && value.trim()) {
+        return this.parseWayForPayPayloadString(value);
+      }
+
+      return this.parseWayForPayPayloadString(key);
+    }
+
+    return payload;
+  }
+
+  private parseWayForPayPayloadString(value: string): WayForPayWebhookPayload {
+    const trimmed = value.trim();
     if (!trimmed) {
       return {};
     }
