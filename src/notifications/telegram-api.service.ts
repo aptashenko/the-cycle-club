@@ -39,18 +39,6 @@ export class TelegramApiService {
     });
   }
 
-  async editMessageReplyMarkup(
-    chatId: string | number,
-    messageId: number,
-    replyMarkup?: TelegramMarkup,
-  ) {
-    return this.request('editMessageReplyMarkup', {
-      chat_id: chatId,
-      message_id: messageId,
-      reply_markup: replyMarkup,
-    });
-  }
-
   async deleteWebhook(dropPendingUpdates = false) {
     return this.request('deleteWebhook', {
       drop_pending_updates: dropPendingUpdates,

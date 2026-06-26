@@ -24,7 +24,6 @@ const CALLBACKS = {
 };
 
 const MOCK_PAYMENT_PREFIX = 'payment:mock-confirm:';
-const OPEN_PAYMENT_PREFIX = 'payment:open:';
 
 const SUPPORT_TOPICS: Record<string, string> = {
   'support:topic:payment': '💳 Проблема с оплатой',
@@ -124,17 +123,7 @@ export class BotService {
       return;
     }
 
-    if (data.startsWith(OPEN_PAYMENT_PREFIX)) {
-      await this.sendPaymentLink(
-        chatId,
-        data.slice(OPEN_PAYMENT_PREFIX.length),
-        callbackQuery.message?.message_id,
-      );
-      return;
-    }
-
     if (data.startsWith(MOCK_PAYMENT_PREFIX)) {
-      await this.removePaymentButton(chatId, callbackQuery.message?.message_id);
       await this.confirmMockPayment(
         chatId,
         data.slice(MOCK_PAYMENT_PREFIX.length),
@@ -274,10 +263,7 @@ export class BotService {
             text: '💳 Подтвердить тестовую оплату',
             callback_data: `${MOCK_PAYMENT_PREFIX}${paymentAttempt.id}`,
           }
-        : {
-            text: '💳 Оплатить',
-            callback_data: `${OPEN_PAYMENT_PREFIX}${paymentAttempt.id}`,
-          };
+        : { text: '💳 Оплатить', url: paymentAttempt.paymentUrl };
 
     await this.telegram.sendMessage(
       chatId,
@@ -293,40 +279,6 @@ export class BotService {
         ],
       },
     );
-  }
-
-  private async sendPaymentLink(
-    chatId: string | number,
-    paymentAttemptId: string,
-    messageId?: number,
-  ) {
-    await this.removePaymentButton(chatId, messageId);
-
-    const paymentAttempt = await this.payments.findById(paymentAttemptId);
-
-    await this.telegram.sendMessage(
-      chatId,
-      [
-        '💳 Откройте защищенную страницу оплаты WayForPay:',
-        '',
-        `<a href="${this.escapeHtml(paymentAttempt.paymentUrl)}">Перейти к оплате</a>`,
-      ].join('\n'),
-    );
-  }
-
-  private async removePaymentButton(
-    chatId: string | number,
-    messageId?: number,
-  ) {
-    if (!messageId) {
-      return;
-    }
-
-    await this.telegram.editMessageReplyMarkup(chatId, messageId, {
-      inline_keyboard: [
-        [{ text: '💬 Саппорт', callback_data: CALLBACKS.supportOpen }],
-      ],
-    });
   }
 
   private async confirmMockPayment(
@@ -362,14 +314,6 @@ export class BotService {
       chatId,
       ['📦 <b>Мои подписки</b>', '', ...lines].join('\n'),
     );
-  }
-
-  private escapeHtml(value: string) {
-    return value
-      .replaceAll('&', '&amp;')
-      .replaceAll('"', '&quot;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;');
   }
 
   private async sendSupportTopics(chatId: string | number) {
