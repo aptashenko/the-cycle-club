@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
@@ -12,6 +17,8 @@ import { WayForPayService, WayForPayWebhookPayload } from './wayforpay.service';
 
 @Injectable()
 export class PaymentService {
+  private readonly logger = new Logger(PaymentService.name);
+
   constructor(
     @InjectRepository(PaymentAttempt)
     private readonly paymentAttemptRepository: Repository<PaymentAttempt>,
@@ -139,12 +146,28 @@ export class PaymentService {
   }
 
   async handleWayForPayWebhook(payload: WayForPayWebhookPayload) {
+    this.logger.log(
+      `WayForPay webhook received: orderReference=${String(
+        payload.orderReference ?? '',
+      )}, status=${String(payload.transactionStatus ?? '')}, reasonCode=${String(
+        payload.reasonCode ?? '',
+      )}, amount=${String(payload.amount ?? '')}, hasSignature=${Boolean(
+        payload.merchantSignature,
+      )}`,
+    );
+
     if (!this.wayForPay.verifyWebhook(payload)) {
+      this.logger.warn(
+        `WayForPay webhook rejected: invalid signature for orderReference=${String(
+          payload.orderReference ?? '',
+        )}`,
+      );
       throw new BadRequestException('Invalid WayForPay signature');
     }
 
     const orderReference = payload.orderReference;
     if (!orderReference) {
+      this.logger.warn('WayForPay webhook rejected: missing orderReference');
       throw new BadRequestException('Missing orderReference');
     }
 
@@ -154,6 +177,9 @@ export class PaymentService {
     });
 
     if (!paymentAttempt) {
+      this.logger.warn(
+        `WayForPay webhook rejected: payment attempt not found for orderReference=${orderReference}`,
+      );
       throw new NotFoundException('Payment attempt not found');
     }
 
@@ -172,10 +198,18 @@ export class PaymentService {
           paymentAttempt.product,
         );
         await this.notifications.notifyPaymentSuccess(paymentAttempt);
+        this.logger.log(
+          `WayForPay payment approved: orderReference=${orderReference}, paymentAttemptId=${paymentAttempt.id}`,
+        );
       }
     } else {
       paymentAttempt.status = PaymentAttemptStatus.Failed;
       await this.paymentAttemptRepository.save(paymentAttempt);
+      this.logger.warn(
+        `WayForPay payment failed: orderReference=${orderReference}, status=${String(
+          payload.transactionStatus ?? '',
+        )}, reasonCode=${String(payload.reasonCode ?? '')}`,
+      );
     }
 
     return this.wayForPay.buildWebhookResponse(orderReference);
