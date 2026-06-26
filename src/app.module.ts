@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
+import { AdminBotModule } from './admin-bot/admin-bot.module';
 import { BotModule } from './bot/bot.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PaymentsModule } from './payments/payments.module';
@@ -32,6 +33,7 @@ import { buildDataSourceOptions } from './database/typeorm.config';
     PaymentsModule,
     SupportModule,
     BotModule,
+    AdminBotModule,
     SchedulerModule,
   ],
 })

@@ -341,6 +341,38 @@ Example:
 curl "https://api.telegram.org/bot123456:ABC/setWebhook?url=https://example.com/bot/telegram/webhook"
 ```
 
+## Admin Telegram Bot
+
+Create a second Telegram bot for admin access and configure:
+
+```env
+ADMIN_TELEGRAM_BOT_TOKEN=admin_bot_token
+ADMIN_TELEGRAM_IDS=123456,789012
+```
+
+Admin webhook endpoint:
+
+```text
+POST {APP_URL}/admin-bot/telegram/webhook
+```
+
+Set admin webhook:
+
+```bash
+curl "https://api.telegram.org/bot<ADMIN_TELEGRAM_BOT_TOKEN>/setWebhook?url=<APP_URL>/admin-bot/telegram/webhook"
+```
+
+Available admin commands:
+
+```text
+/stats
+/support
+/user <telegram_id>
+/payments <telegram_id>
+/subscriptions <telegram_id>
+/activity <telegram_id>
+```
+
 ## Production WayForPay Mode
 
 For real payments:
