@@ -367,6 +367,7 @@ Available admin commands:
 ```text
 /stats
 /support
+/resolve_support <request_id>
 /user <telegram_id>
 /payments <telegram_id>
 /subscriptions <telegram_id>

@@ -78,6 +78,11 @@ export class AdminBotService {
       return;
     }
 
+    if (command === '/resolve_support') {
+      await this.resolveSupport(chatId, args[0]);
+      return;
+    }
+
     if (command === '/user') {
       await this.sendUser(chatId, args[0]);
       return;
@@ -113,6 +118,7 @@ export class AdminBotService {
         '',
         '/stats - summary',
         '/support - open support requests',
+        '/resolve_support &lt;request_id&gt; - mark support request resolved',
         '/user &lt;telegram_id&gt; - user profile',
         '/payments &lt;telegram_id&gt; - latest payments',
         '/subscriptions &lt;telegram_id&gt; - user subscriptions',
@@ -324,11 +330,57 @@ export class AdminBotService {
         ...requests.map((request) =>
           [
             `${this.formatDate(request.createdAt)} - ${this.escape(request.topic)}`,
+            `ID: <code>${this.escape(request.id)}</code>`,
             `User: ${this.formatUser(request.user)}`,
             `Telegram ID: <code>${this.escape(request.user.telegramId)}</code>`,
+            `Resolve: <code>/resolve_support ${this.escape(request.id)}</code>`,
           ].join('\n'),
         ),
       ].join('\n\n'),
+    );
+  }
+
+  private async resolveSupport(chatId: string | number, requestId?: string) {
+    if (!requestId) {
+      await this.telegram.sendMessage(
+        chatId,
+        'Usage: /resolve_support &lt;request_id&gt;',
+      );
+      return;
+    }
+
+    const request = await this.supportRequests.findOne({
+      where: { id: requestId },
+      relations: { user: true },
+    });
+
+    if (!request) {
+      await this.telegram.sendMessage(chatId, 'Support request not found.');
+      return;
+    }
+
+    if (request.status === SupportRequestStatus.Resolved) {
+      await this.telegram.sendMessage(
+        chatId,
+        'Support request is already resolved.',
+      );
+      return;
+    }
+
+    request.status = SupportRequestStatus.Resolved;
+    request.resolvedAt = new Date();
+    await this.supportRequests.save(request);
+
+    await this.telegram.sendMessage(
+      chatId,
+      [
+        '✅ <b>Support request resolved</b>',
+        '',
+        `ID: <code>${this.escape(request.id)}</code>`,
+        `User: ${this.formatUser(request.user)}`,
+        `Telegram ID: <code>${this.escape(request.user.telegramId)}</code>`,
+        `Topic: ${this.escape(request.topic)}`,
+      ].join('\n'),
     );
   }
 
