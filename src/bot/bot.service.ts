@@ -24,6 +24,7 @@ const CALLBACKS = {
 };
 
 const MOCK_PAYMENT_PREFIX = 'payment:mock-confirm:';
+const OPEN_PAYMENT_PREFIX = 'payment:open:';
 
 const SUPPORT_TOPICS: Record<string, string> = {
   'support:topic:payment': '💳 Проблема с оплатой',
@@ -123,8 +124,21 @@ export class BotService {
       return;
     }
 
+    if (data.startsWith(OPEN_PAYMENT_PREFIX)) {
+      await this.sendPaymentLink(
+        chatId,
+        data.slice(OPEN_PAYMENT_PREFIX.length),
+        callbackQuery.message?.message_id,
+      );
+      return;
+    }
+
     if (data.startsWith(MOCK_PAYMENT_PREFIX)) {
-      await this.confirmMockPayment(chatId, data.slice(MOCK_PAYMENT_PREFIX.length));
+      await this.removePaymentButton(chatId, callbackQuery.message?.message_id);
+      await this.confirmMockPayment(
+        chatId,
+        data.slice(MOCK_PAYMENT_PREFIX.length),
+      );
       return;
     }
 
@@ -181,9 +195,21 @@ export class BotService {
       await this.subscriptions.hasActiveSubscription(userId, product.id);
 
     const inlineKeyboard = hasActiveSubscription
-      ? [[{ text: '📖 Что внутри клуба', callback_data: CALLBACKS.insideTheCycle }]]
+      ? [
+          [
+            {
+              text: '📖 Что внутри клуба',
+              callback_data: CALLBACKS.insideTheCycle,
+            },
+          ],
+        ]
       : [
-          [{ text: '✨ Присоединиться', callback_data: CALLBACKS.joinTheCycle }],
+          [
+            {
+              text: '✨ Присоединиться',
+              callback_data: CALLBACKS.joinTheCycle,
+            },
+          ],
           [
             {
               text: '📖 Что внутри клуба',
@@ -229,7 +255,10 @@ export class BotService {
       await this.subscriptions.hasActiveSubscription(user.id, product.id);
 
     if (hasActiveSubscription) {
-      await this.telegram.sendMessage(chatId, 'У вас уже есть активная подписка.');
+      await this.telegram.sendMessage(
+        chatId,
+        'У вас уже есть активная подписка.',
+      );
       await this.sendTheCycle(chatId, user.id);
       return;
     }
@@ -245,7 +274,10 @@ export class BotService {
             text: '💳 Подтвердить тестовую оплату',
             callback_data: `${MOCK_PAYMENT_PREFIX}${paymentAttempt.id}`,
           }
-        : { text: '💳 Оплатить', url: paymentAttempt.paymentUrl };
+        : {
+            text: '💳 Оплатить',
+            callback_data: `${OPEN_PAYMENT_PREFIX}${paymentAttempt.id}`,
+          };
 
     await this.telegram.sendMessage(
       chatId,
@@ -263,7 +295,44 @@ export class BotService {
     );
   }
 
-  private async confirmMockPayment(chatId: string | number, paymentAttemptId: string) {
+  private async sendPaymentLink(
+    chatId: string | number,
+    paymentAttemptId: string,
+    messageId?: number,
+  ) {
+    await this.removePaymentButton(chatId, messageId);
+
+    const paymentAttempt = await this.payments.findById(paymentAttemptId);
+
+    await this.telegram.sendMessage(
+      chatId,
+      [
+        '💳 Откройте защищенную страницу оплаты WayForPay:',
+        '',
+        `<a href="${this.escapeHtml(paymentAttempt.paymentUrl)}">Перейти к оплате</a>`,
+      ].join('\n'),
+    );
+  }
+
+  private async removePaymentButton(
+    chatId: string | number,
+    messageId?: number,
+  ) {
+    if (!messageId) {
+      return;
+    }
+
+    await this.telegram.editMessageReplyMarkup(chatId, messageId, {
+      inline_keyboard: [
+        [{ text: '💬 Саппорт', callback_data: CALLBACKS.supportOpen }],
+      ],
+    });
+  }
+
+  private async confirmMockPayment(
+    chatId: string | number,
+    paymentAttemptId: string,
+  ) {
     await this.payments.confirmMockPaymentAttempt(paymentAttemptId);
     await this.telegram.sendMessage(
       chatId,
@@ -295,10 +364,23 @@ export class BotService {
     );
   }
 
+  private escapeHtml(value: string) {
+    return value
+      .replaceAll('&', '&amp;')
+      .replaceAll('"', '&quot;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;');
+  }
+
   private async sendSupportTopics(chatId: string | number) {
     await this.telegram.sendMessage(chatId, 'Выберите тему обращения:', {
       inline_keyboard: [
-        [{ text: '💳 Проблема с оплатой', callback_data: 'support:topic:payment' }],
+        [
+          {
+            text: '💳 Проблема с оплатой',
+            callback_data: 'support:topic:payment',
+          },
+        ],
         [
           {
             text: '📚 Нет доступа к продукту',
