@@ -15,6 +15,16 @@ export class PaymentsController {
   @Get('wayforpay/return/:id')
   @Header('Content-Type', 'text/html; charset=utf-8')
   paymentReturn() {
+    return this.renderPaymentReturn();
+  }
+
+  @Post('wayforpay/return/:id')
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  paymentReturnPost() {
+    return this.renderPaymentReturn();
+  }
+
+  private renderPaymentReturn() {
     return [
       '<!doctype html>',
       '<html><head><meta charset="utf-8"><title>Payment</title></head>',
