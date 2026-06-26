@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
+import { text, urlencoded } from 'express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -8,6 +9,8 @@ async function bootstrap() {
   const config = app.get(ConfigService);
   const port = config.get<number>('PORT', 3000);
 
+  app.use(urlencoded({ extended: true }));
+  app.use(text({ type: ['text/*', 'application/octet-stream'] }));
   app.enableShutdownHooks();
   await app.listen(port);
 }

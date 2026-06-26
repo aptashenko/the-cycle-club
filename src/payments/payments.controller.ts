@@ -33,8 +33,10 @@ export class PaymentsController {
   }
 
   @Post('wayforpay/webhook')
-  handleWebhook(@Body() payload: WayForPayWebhookPayload) {
-    return this.payments.handleWayForPayWebhook(payload);
+  handleWebhook(@Body() payload: WayForPayWebhookPayload | string) {
+    return this.payments.handleWayForPayWebhook(
+      this.normalizeWayForPayPayload(payload),
+    );
   }
 
   @Get('mock/checkout/:id')
@@ -47,5 +49,26 @@ export class PaymentsController {
   @Header('Content-Type', 'text/html; charset=utf-8')
   confirmMockPayment(@Param('id') id: string): Promise<string> {
     return this.payments.confirmMockPayment(id);
+  }
+
+  private normalizeWayForPayPayload(
+    payload: WayForPayWebhookPayload | string,
+  ): WayForPayWebhookPayload {
+    if (typeof payload !== 'string') {
+      return payload;
+    }
+
+    const trimmed = payload.trim();
+    if (!trimmed) {
+      return {};
+    }
+
+    if (trimmed.startsWith('{')) {
+      return JSON.parse(trimmed) as WayForPayWebhookPayload;
+    }
+
+    return Object.fromEntries(
+      new URLSearchParams(trimmed),
+    ) as WayForPayWebhookPayload;
   }
 }
