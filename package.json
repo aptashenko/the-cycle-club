@@ -7,10 +7,16 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
+    "deploy": "npm run build && npm run migration:run && (pm2 restart the-cycle-club || pm2 start dist/main.js --name the-cycle-club)",
     "lint": "eslint \"src/**/*.ts\" --fix",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "test": "jest",
-    "typeorm": "typeorm-ts-node-commonjs"
+    "typeorm": "typeorm-ts-node-commonjs -d src/database/data-source.ts",
+    "migration:create": "npm run typeorm -- migration:create",
+    "migration:generate": "npm run typeorm -- migration:generate",
+    "migration:run": "npm run typeorm -- migration:run",
+    "migration:revert": "npm run typeorm -- migration:revert",
+    "migration:show": "npm run typeorm -- migration:show"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",
@@ -19,6 +25,7 @@
     "@nestjs/platform-express": "^10.4.15",
     "@nestjs/schedule": "^4.1.2",
     "@nestjs/typeorm": "^10.0.2",
+    "dotenv": "^16.4.5",
     "pg": "^8.13.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",

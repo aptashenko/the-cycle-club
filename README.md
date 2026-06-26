@@ -53,6 +53,7 @@ Minimal local `.env`:
 ```env
 TELEGRAM_BOT_TOKEN=your_bot_token
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/the_cycle_club
+DATABASE_MIGRATIONS_RUN=true
 TELEGRAM_BOT_MODE=polling
 PAYMENT_MODE=mock
 APP_URL=http://localhost:3000
@@ -295,7 +296,23 @@ PaymentAttempt: pending, paid, failed, abandoned
 SupportRequest: open, in_progress, resolved
 ```
 
-TypeORM `synchronize` is enabled for MVP development, so tables are created automatically on startup.
+TypeORM migrations are enabled. By default, pending migrations run on application startup when:
+
+```env
+DATABASE_MIGRATIONS_RUN=true
+```
+
+To run migrations manually:
+
+```bash
+npm run migration:run
+```
+
+To generate a new migration after changing entities:
+
+```bash
+npm run migration:generate -- src/database/migrations/YourMigrationName
+```
 
 ## Production Telegram Mode
 
@@ -369,6 +386,12 @@ Build:
 npm run build
 ```
 
+Run database migrations:
+
+```bash
+npm run migration:run
+```
+
 Start dev server:
 
 ```bash
@@ -380,6 +403,12 @@ Start production build:
 ```bash
 npm run build
 npm run start:prod
+```
+
+Deploy with migrations:
+
+```bash
+npm run deploy
 ```
 
 ## Notes

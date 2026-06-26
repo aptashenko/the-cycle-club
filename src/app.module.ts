@@ -10,6 +10,7 @@ import { SchedulerModule } from './scheduler/scheduler.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { SupportModule } from './support/support.module';
 import { UsersModule } from './users/users.module';
+import { buildDataSourceOptions } from './database/typeorm.config';
 
 @Module({
   imports: [
@@ -18,10 +19,10 @@ import { UsersModule } from './users/users.module';
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        type: 'postgres',
-        url: config.getOrThrow<string>('DATABASE_URL'),
-        autoLoadEntities: true,
-        synchronize: true,
+        ...buildDataSourceOptions(
+          config.getOrThrow<string>('DATABASE_URL'),
+          config.get<string>('DATABASE_MIGRATIONS_RUN', 'true') === 'true',
+        ),
       }),
     }),
     UsersModule,
