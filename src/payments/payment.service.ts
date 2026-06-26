@@ -11,6 +11,7 @@ import { PaymentAttemptStatus, PaymentProvider } from '../common/enums';
 import { NotificationService } from '../notifications/notification.service';
 import { Product } from '../products/product.entity';
 import { SubscriptionService } from '../subscriptions/subscription.service';
+import { UserActivityService } from '../user-activity/user-activity.service';
 import { User } from '../users/user.entity';
 import { PaymentAttempt } from './payment-attempt.entity';
 import { WayForPayService, WayForPayWebhookPayload } from './wayforpay.service';
@@ -26,6 +27,7 @@ export class PaymentService {
     private readonly wayForPay: WayForPayService,
     private readonly subscriptions: SubscriptionService,
     private readonly notifications: NotificationService,
+    private readonly activity: UserActivityService,
   ) {}
 
   async createWayForPayAttempt(
@@ -35,7 +37,10 @@ export class PaymentService {
     return this.createPaymentAttempt(user, product);
   }
 
-  async createPaymentAttempt(user: User, product: Product): Promise<PaymentAttempt> {
+  async createPaymentAttempt(
+    user: User,
+    product: Product,
+  ): Promise<PaymentAttempt> {
     const provider = this.isMockMode()
       ? PaymentProvider.Mock
       : PaymentProvider.WayForPay;
@@ -81,6 +86,19 @@ export class PaymentService {
       throw new BadRequestException('Payment attempt is not pending');
     }
 
+    await this.activity.track(
+      paymentAttempt.user,
+      'payment',
+      'wayforpay_checkout_opened',
+      {
+        paymentAttemptId: paymentAttempt.id,
+        orderReference: paymentAttempt.providerOrderId,
+        amount: paymentAttempt.amount,
+        currency: paymentAttempt.currency,
+        productId: paymentAttempt.productId,
+      },
+    );
+
     return this.wayForPay.renderCheckoutForm(paymentAttempt);
   }
 
@@ -90,6 +108,18 @@ export class PaymentService {
     if (paymentAttempt.status !== PaymentAttemptStatus.Pending) {
       throw new BadRequestException('Payment attempt is not pending');
     }
+
+    await this.activity.track(
+      paymentAttempt.user,
+      'payment',
+      'mock_checkout_opened',
+      {
+        paymentAttemptId: paymentAttempt.id,
+        amount: paymentAttempt.amount,
+        currency: paymentAttempt.currency,
+        productId: paymentAttempt.productId,
+      },
+    );
 
     return [
       '<!doctype html>',
@@ -198,6 +228,19 @@ export class PaymentService {
           paymentAttempt.product,
         );
         await this.notifications.notifyPaymentSuccess(paymentAttempt);
+        await this.activity.track(
+          paymentAttempt.user,
+          'payment',
+          'wayforpay_payment_approved',
+          {
+            paymentAttemptId: paymentAttempt.id,
+            orderReference,
+            transactionId: paymentAttempt.providerTransactionId,
+            amount: paymentAttempt.amount,
+            currency: paymentAttempt.currency,
+            productId: paymentAttempt.productId,
+          },
+        );
         this.logger.log(
           `WayForPay payment approved: orderReference=${orderReference}, paymentAttemptId=${paymentAttempt.id}`,
         );
@@ -205,6 +248,20 @@ export class PaymentService {
     } else {
       paymentAttempt.status = PaymentAttemptStatus.Failed;
       await this.paymentAttemptRepository.save(paymentAttempt);
+      await this.activity.track(
+        paymentAttempt.user,
+        'payment',
+        'wayforpay_payment_failed',
+        {
+          paymentAttemptId: paymentAttempt.id,
+          orderReference,
+          transactionStatus: payload.transactionStatus,
+          reasonCode: payload.reasonCode,
+          amount: paymentAttempt.amount,
+          currency: paymentAttempt.currency,
+          productId: paymentAttempt.productId,
+        },
+      );
       this.logger.warn(
         `WayForPay payment failed: orderReference=${orderReference}, status=${String(
           payload.transactionStatus ?? '',

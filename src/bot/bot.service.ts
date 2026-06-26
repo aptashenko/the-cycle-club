@@ -4,6 +4,7 @@ import { PaymentService } from '../payments/payment.service';
 import { ProductService } from '../products/product.service';
 import { SubscriptionService } from '../subscriptions/subscription.service';
 import { SupportService } from '../support/support.service';
+import { UserActivityService } from '../user-activity/user-activity.service';
 import { User } from '../users/user.entity';
 import { UserService } from '../users/user.service';
 import { TelegramApiService } from '../notifications/telegram-api.service';
@@ -42,6 +43,7 @@ export class BotService {
     private readonly subscriptions: SubscriptionService,
     private readonly payments: PaymentService,
     private readonly support: SupportService,
+    private readonly activity: UserActivityService,
   ) {}
 
   async handleUpdate(update: TelegramUpdate) {
@@ -62,6 +64,11 @@ export class BotService {
 
     const user = await this.users.upsertTelegramUser(message.from);
     const text = message.text.trim();
+    await this.activity.track(user, 'message', 'message_received', {
+      chatId: message.chat.id,
+      messageId: message.message_id,
+      text,
+    });
 
     if (text === '/start' || text === '🏠 На главную') {
       await this.sendWelcome(message.chat.id);
@@ -91,6 +98,11 @@ export class BotService {
     if (!data) {
       return;
     }
+
+    await this.activity.track(user, 'callback', data, {
+      chatId,
+      messageId: callbackQuery.message?.message_id,
+    });
 
     if (data === CALLBACKS.theCycle) {
       await this.sendTheCycle(chatId, user.id);
@@ -256,6 +268,14 @@ export class BotService {
       user,
       product,
     );
+    await this.activity.track(user, 'payment', 'payment_attempt_created', {
+      paymentAttemptId: paymentAttempt.id,
+      provider: paymentAttempt.provider,
+      amount: paymentAttempt.amount,
+      currency: paymentAttempt.currency,
+      productId: product.id,
+      productSlug: product.slug,
+    });
 
     const paymentButton =
       paymentAttempt.provider === PaymentProvider.Mock
@@ -286,6 +306,15 @@ export class BotService {
     paymentAttemptId: string,
   ) {
     await this.payments.confirmMockPaymentAttempt(paymentAttemptId);
+    const paymentAttempt = await this.payments.findById(paymentAttemptId);
+    await this.activity.track(
+      paymentAttempt.user,
+      'payment',
+      'mock_payment_confirmed',
+      {
+        paymentAttemptId,
+      },
+    );
     await this.telegram.sendMessage(
       chatId,
       '✅ Тестовая оплата подтверждена. Подписка активирована.',
