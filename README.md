@@ -373,6 +373,17 @@ Available admin commands:
 /activity <telegram_id>
 ```
 
+Internal notifications are also sent through the admin bot to
+`ADMIN_TELEGRAM_IDS`:
+
+- successful payments;
+- abandoned payments;
+- new support requests.
+
+For support requests, `MANAGER_TELEGRAM_ID` is also included if configured.
+Each recipient must start the admin bot once before Telegram allows the bot to
+send direct messages.
+
 ## Production WayForPay Mode
 
 For real payments:

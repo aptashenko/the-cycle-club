@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { AdminTelegramApiService } from '../admin-bot/admin-telegram-api.service';
 import { PaymentAttempt } from '../payments/payment-attempt.entity';
 import { SupportRequest } from '../support/support-request.entity';
 import { User } from '../users/user.entity';
@@ -10,6 +11,7 @@ export class NotificationService {
   constructor(
     private readonly config: ConfigService,
     private readonly telegram: TelegramApiService,
+    private readonly adminTelegram: AdminTelegramApiService,
   ) {}
 
   async notifyPaymentSuccess(paymentAttempt: PaymentAttempt) {
@@ -18,13 +20,7 @@ export class NotificationService {
       '✅ Оплата прошла успешно. Ваша подписка The Cycle активирована ❤️',
     );
 
-    const adminId = this.config.get<string>('ADMIN_TELEGRAM_ID');
-    if (!adminId) {
-      return;
-    }
-
-    await this.telegram.sendMessage(
-      adminId,
+    await this.sendAdminMessage(
       [
         '✅ <b>Новая оплата</b>',
         '',
@@ -53,16 +49,7 @@ export class NotificationService {
   }
 
   async notifySupportRequest(request: SupportRequest) {
-    const managerId =
-      this.config.get<string>('MANAGER_TELEGRAM_ID') ??
-      this.config.get<string>('ADMIN_TELEGRAM_ID');
-
-    if (!managerId) {
-      return;
-    }
-
-    await this.telegram.sendMessage(
-      managerId,
+    await this.sendAdminMessage(
       [
         '💬 <b>Новое обращение в поддержку</b>',
         '',
@@ -78,6 +65,7 @@ export class NotificationService {
         '<b>Открыть пользователя:</b>',
         `tg://user?id=${request.user.telegramId}`,
       ].join('\n'),
+      true,
     );
   }
 
@@ -98,13 +86,7 @@ export class NotificationService {
       },
     );
 
-    const adminId = this.config.get<string>('ADMIN_TELEGRAM_ID');
-    if (!adminId) {
-      return;
-    }
-
-    await this.telegram.sendMessage(
-      adminId,
+    await this.sendAdminMessage(
       [
         '⚠️ <b>Оплата не завершена</b>',
         '',
@@ -121,6 +103,34 @@ export class NotificationService {
         `${paymentAttempt.amount} ${paymentAttempt.currency}`,
       ].join('\n'),
     );
+  }
+
+  private async sendAdminMessage(text: string, includeManager = false) {
+    const recipients = this.getAdminRecipients(includeManager);
+
+    await Promise.all(
+      recipients.map((chatId) => this.adminTelegram.sendMessage(chatId, text)),
+    );
+  }
+
+  private getAdminRecipients(includeManager: boolean) {
+    const ids = this.config
+      .get<string>('ADMIN_TELEGRAM_IDS', '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
+
+    const legacyAdminId = this.config.get<string>('ADMIN_TELEGRAM_ID');
+    if (legacyAdminId) {
+      ids.push(legacyAdminId);
+    }
+
+    const managerId = this.config.get<string>('MANAGER_TELEGRAM_ID');
+    if (includeManager && managerId) {
+      ids.push(managerId);
+    }
+
+    return [...new Set(ids)];
   }
 
   private formatUser(user: User) {
