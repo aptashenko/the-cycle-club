@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AdminTelegramApiService } from '../admin-bot/admin-telegram-api.service';
 import { PaymentAttempt } from '../payments/payment-attempt.entity';
+import { Subscription } from '../subscriptions/subscription.entity';
 import { SupportRequest } from '../support/support-request.entity';
 import { User } from '../users/user.entity';
 import { TelegramApiService } from './telegram-api.service';
@@ -151,6 +152,42 @@ export class NotificationService {
         '<b>Открыть пользователя:</b>',
         `tg://user?id=${paymentAttempt.user.telegramId}`,
       ].join('\n'),
+    );
+  }
+
+  async notifySubscriptionExpiring(
+    subscription: Subscription,
+    daysBefore: 5 | 1,
+  ) {
+    const daysText = daysBefore === 1 ? '1 день' : '5 дней';
+    const expiresText = subscription.expiresAt
+      ? subscription.expiresAt.toLocaleDateString('ru-RU', {
+          timeZone: 'Europe/Paris',
+        })
+      : '-';
+
+    await this.telegram.sendMessage(
+      subscription.user.telegramId,
+      [
+        '⏰ <b>Доступ скоро закончится</b>',
+        '',
+        `Продукт: ${subscription.product.title}`,
+        `До окончания: ${daysText}`,
+        `Активен до: ${expiresText}`,
+        '',
+        'Чтобы продлить доступ, оформите оплату заново.',
+      ].join('\n'),
+      {
+        inline_keyboard: [
+          [
+            {
+              text: '💳 Продлить доступ',
+              callback_data: `product:${subscription.product.slug}`,
+            },
+          ],
+          [{ text: '💬 Саппорт', callback_data: 'support:open' }],
+        ],
+      },
     );
   }
 

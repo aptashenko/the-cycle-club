@@ -195,29 +195,22 @@ export class BotService {
     const hasActiveSubscription =
       await this.subscriptions.hasActiveSubscription(userId, product.id);
 
-    const inlineKeyboard = hasActiveSubscription
-      ? [
-          [
-            {
-              text: '📖 Что внутри клуба',
-              callback_data: CALLBACKS.insideTheCycle,
-            },
-          ],
-        ]
-      : [
-          [
-            {
-              text: '✨ Присоединиться',
-              callback_data: CALLBACKS.joinTheCycle,
-            },
-          ],
-          [
-            {
-              text: '📖 Что внутри клуба',
-              callback_data: CALLBACKS.insideTheCycle,
-            },
-          ],
-        ];
+    const inlineKeyboard = [
+      [
+        {
+          text: hasActiveSubscription
+            ? '💳 Продлить доступ'
+            : '✨ Присоединиться',
+          callback_data: CALLBACKS.joinTheCycle,
+        },
+      ],
+      [
+        {
+          text: '📖 Что внутри клуба',
+          callback_data: CALLBACKS.insideTheCycle,
+        },
+      ],
+    ];
 
     await this.telegram.sendMessage(
       chatId,
@@ -255,15 +248,6 @@ export class BotService {
     const hasActiveSubscription =
       await this.subscriptions.hasActiveSubscription(user.id, product.id);
 
-    if (hasActiveSubscription) {
-      await this.telegram.sendMessage(
-        chatId,
-        'У вас уже есть активная подписка.',
-      );
-      await this.sendTheCycle(chatId, user.id);
-      return;
-    }
-
     const paymentAttempt = await this.payments.createWayForPayAttempt(
       user,
       product,
@@ -288,7 +272,9 @@ export class BotService {
     await this.telegram.sendMessage(
       chatId,
       [
-        '✨ Для присоединения к The Cycle завершите оплату.',
+        hasActiveSubscription
+          ? '✨ Для продления доступа к The Cycle завершите оплату.'
+          : '✨ Для присоединения к The Cycle завершите оплату.',
         '',
         `Сумма: ${paymentAttempt.amount} ${paymentAttempt.currency}`,
       ].join('\n'),

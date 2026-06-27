@@ -45,6 +45,12 @@ export class Subscription {
   @Column({ name: 'expires_at', type: 'timestamptz', nullable: true })
   expiresAt?: Date;
 
+  @Column({ name: 'reminded_5_days_at', type: 'timestamptz', nullable: true })
+  reminded5DaysAt?: Date | null;
+
+  @Column({ name: 'reminded_1_day_at', type: 'timestamptz', nullable: true })
+  reminded1DayAt?: Date | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
