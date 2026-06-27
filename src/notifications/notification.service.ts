@@ -44,9 +44,6 @@ export class NotificationService {
         '',
         '<b>Transaction ID:</b>',
         paymentAttempt.providerTransactionId ?? '-',
-        '',
-        '<b>Открыть пользователя:</b>',
-        `tg://user?id=${paymentAttempt.user.telegramId}`,
       ].join('\n'),
     );
   }
@@ -64,9 +61,6 @@ export class NotificationService {
         '',
         '<b>Тема:</b>',
         request.topic,
-        '',
-        '<b>Открыть пользователя:</b>',
-        `tg://user?id=${request.user.telegramId}`,
       ].join('\n'),
       true,
       {
@@ -148,9 +142,6 @@ export class NotificationService {
         '',
         '<b>Reason code:</b>',
         String(payload.reasonCode ?? '-'),
-        '',
-        '<b>Открыть пользователя:</b>',
-        `tg://user?id=${paymentAttempt.user.telegramId}`,
       ].join('\n'),
     );
   }
