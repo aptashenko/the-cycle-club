@@ -7,7 +7,11 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
-import { PaymentAttemptStatus, PaymentProvider } from '../common/enums';
+import {
+  PaymentAttemptStatus,
+  PaymentProvider,
+  ProductType,
+} from '../common/enums';
 import { NotificationService } from '../notifications/notification.service';
 import { Product } from '../products/product.entity';
 import { SubscriptionService } from '../subscriptions/subscription.service';
@@ -165,11 +169,17 @@ export class PaymentService {
       paymentAttempt.rawPayload = { provider: 'mock', confirmedAt: new Date() };
 
       await this.paymentAttemptRepository.save(paymentAttempt);
-      await this.subscriptions.activate(
-        paymentAttempt.user,
-        paymentAttempt.product,
+      const subscription =
+        paymentAttempt.product.type === ProductType.Subscription
+          ? await this.subscriptions.activate(
+              paymentAttempt.user,
+              paymentAttempt.product,
+            )
+          : undefined;
+      await this.notifications.notifyPaymentSuccess(
+        paymentAttempt,
+        subscription,
       );
-      await this.notifications.notifyPaymentSuccess(paymentAttempt);
     }
 
     return paymentAttempt;
@@ -223,11 +233,17 @@ export class PaymentService {
           String(payload.transactionId ?? payload.authCode ?? '') || undefined;
 
         await this.paymentAttemptRepository.save(paymentAttempt);
-        await this.subscriptions.activate(
-          paymentAttempt.user,
-          paymentAttempt.product,
+        const subscription =
+          paymentAttempt.product.type === ProductType.Subscription
+            ? await this.subscriptions.activate(
+                paymentAttempt.user,
+                paymentAttempt.product,
+              )
+            : undefined;
+        await this.notifications.notifyPaymentSuccess(
+          paymentAttempt,
+          subscription,
         );
-        await this.notifications.notifyPaymentSuccess(paymentAttempt);
         await this.activity.track(
           paymentAttempt.user,
           'payment',

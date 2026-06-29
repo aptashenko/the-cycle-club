@@ -8,30 +8,21 @@ import { UserActivityService } from '../user-activity/user-activity.service';
 import { User } from '../users/user.entity';
 import { UserService } from '../users/user.service';
 import { TelegramApiService } from '../notifications/telegram-api.service';
+import { BotFlowService, SUPPORT_OPEN_CALLBACK } from './bot-flow.service';
+import { FlowScreen } from './bot-flow.types';
 import {
   TelegramCallbackQuery,
   TelegramMessage,
   TelegramUpdate,
-  TelegramUser,
 } from './telegram.types';
 
-const CALLBACKS = {
+const MOCK_PAYMENT_PREFIX = 'payment:mock-confirm:';
+const LEGACY_CALLBACKS = {
   theCycle: 'product:the-cycle',
   marathon: 'product:marathon',
   materials: 'product:materials',
   joinTheCycle: 'payment:join-the-cycle',
   insideTheCycle: 'product:the-cycle:inside',
-  supportOpen: 'support:open',
-};
-
-const MOCK_PAYMENT_PREFIX = 'payment:mock-confirm:';
-
-const SUPPORT_TOPICS: Record<string, string> = {
-  'support:topic:payment': '💳 Проблема с оплатой',
-  'support:topic:access': '📚 Нет доступа к продукту',
-  'support:topic:club': '❓ Вопрос по клубу',
-  'support:topic:technical': '⚙️ Техническая проблема',
-  'support:topic:other': '📝 Другое',
 };
 
 @Injectable()
@@ -44,6 +35,7 @@ export class BotService {
     private readonly payments: PaymentService,
     private readonly support: SupportService,
     private readonly activity: UserActivityService,
+    private readonly flow: BotFlowService,
   ) {}
 
   async handleUpdate(update: TelegramUpdate) {
@@ -71,7 +63,7 @@ export class BotService {
     });
 
     if (text === '/start' || text === '🏠 На главную') {
-      await this.sendWelcome(message.chat.id);
+      await this.sendStartScreen(message.chat.id, user.id);
       return;
     }
 
@@ -85,7 +77,7 @@ export class BotService {
       return;
     }
 
-    await this.sendWelcome(message.chat.id);
+    await this.sendStartScreen(message.chat.id, user.id);
   }
 
   private async handleCallback(callbackQuery: TelegramCallbackQuery) {
@@ -104,34 +96,41 @@ export class BotService {
       messageId: callbackQuery.message?.message_id,
     });
 
-    if (data === CALLBACKS.theCycle) {
-      await this.sendTheCycle(chatId, user.id);
+    if (data === LEGACY_CALLBACKS.theCycle) {
+      await this.sendFlowScreen(chatId, user.id, 'the-cycle');
       return;
     }
 
-    if (data === CALLBACKS.marathon) {
-      await this.telegram.sendMessage(
-        chatId,
-        '🔥 Марафон скоро будет доступен. Следите за обновлениями ❤️',
-      );
+    if (data === LEGACY_CALLBACKS.marathon) {
+      await this.sendFlowScreen(chatId, user.id, 'marathon');
       return;
     }
 
-    if (data === CALLBACKS.materials) {
-      await this.telegram.sendMessage(
-        chatId,
-        '📚 Матеріали скоро будут доступны. Следите за обновлениями ❤️',
-      );
+    if (data === LEGACY_CALLBACKS.materials) {
+      await this.sendFlowScreen(chatId, user.id, 'materials');
       return;
     }
 
-    if (data === CALLBACKS.insideTheCycle) {
-      await this.sendInsideTheCycle(chatId);
+    if (data === LEGACY_CALLBACKS.insideTheCycle) {
+      await this.sendFlowScreen(chatId, user.id, 'the-cycle-inside');
       return;
     }
 
-    if (data === CALLBACKS.joinTheCycle) {
-      await this.startTheCyclePayment(chatId, user);
+    if (data === LEGACY_CALLBACKS.joinTheCycle) {
+      await this.startProductPayment(chatId, user, 'the-cycle');
+      return;
+    }
+
+    const flowScreenId = this.flow.getFlowScreenIdFromCallback(data);
+    if (flowScreenId) {
+      await this.sendFlowScreen(chatId, user.id, flowScreenId);
+      return;
+    }
+
+    const paymentProductSlug =
+      this.flow.getPaymentProductSlugFromCallback(data);
+    if (paymentProductSlug) {
+      await this.startProductPayment(chatId, user, paymentProductSlug);
       return;
     }
 
@@ -143,107 +142,73 @@ export class BotService {
       return;
     }
 
-    if (data === CALLBACKS.supportOpen) {
+    if (data === SUPPORT_OPEN_CALLBACK) {
       await this.sendSupportTopics(chatId);
       return;
     }
 
-    if (SUPPORT_TOPICS[data]) {
-      await this.support.create(user, SUPPORT_TOPICS[data]);
+    const supportTopic = this.flow.getSupportTopicByCallback(data);
+    if (supportTopic) {
+      await this.support.create(user, supportTopic.requestTopic);
       await this.telegram.sendMessage(
         chatId,
-        'Спасибо. Мы получили ваше обращение и скоро свяжемся с вами ❤️',
+        this.flow.getSupportSuccessMessage(),
       );
     }
   }
 
-  private async sendWelcome(chatId: string | number) {
-    await this.telegram.sendMessage(
-      chatId,
-      [
-        'Добро пожаловать в женский клуб The Cycle ❤️',
-        '',
-        'Здесь эксперт помогает бережно разбираться в себе, цикле, состоянии и важных жизненных переходах.',
-        '',
-        'Выберите направление:',
-      ].join('\n'),
-      {
-        inline_keyboard: [
-          [{ text: '🌸 The Cycle', callback_data: CALLBACKS.theCycle }],
-          [{ text: '🔥 Марафон', callback_data: CALLBACKS.marathon }],
-          [{ text: '📚 Матеріали', callback_data: CALLBACKS.materials }],
-        ],
-      },
-    );
-
+  private async sendStartScreen(chatId: string | number, userId: string) {
+    await this.sendFlowScreen(chatId, userId, this.flow.getStartScreenId());
     await this.sendReplyKeyboard(chatId);
   }
 
-  private async sendReplyKeyboard(chatId: string | number) {
-    await this.telegram.sendMessage(chatId, 'Основное меню доступно внизу.', {
-      keyboard: [
-        [{ text: '🏠 На главную' }],
-        [{ text: '📦 Мои подписки' }, { text: '💬 Саппорт' }],
-      ],
-      resize_keyboard: true,
-      is_persistent: true,
-    });
+  private async sendFlowScreen(
+    chatId: string | number,
+    userId: string,
+    screenId: string,
+  ) {
+    const screen = this.flow.getScreen(screenId);
+    const context = await this.buildFlowScreenContext(screen, userId);
+    const inlineKeyboard = this.flow.buildScreenInlineKeyboard(
+      screenId,
+      context,
+    );
+
+    await this.telegram.sendMessage(
+      chatId,
+      this.flow.getScreenText(screenId),
+      inlineKeyboard ? { inline_keyboard: inlineKeyboard } : undefined,
+    );
   }
 
-  private async sendTheCycle(chatId: string | number, userId: string) {
-    const product = await this.products.getTheCycleProduct();
+  private async buildFlowScreenContext(screen: FlowScreen, userId: string) {
+    if (!screen.productSlug) {
+      return {};
+    }
+
+    const product = await this.products.getActiveProductBySlug(
+      screen.productSlug,
+    );
     const hasActiveSubscription =
       await this.subscriptions.hasActiveSubscription(userId, product.id);
 
-    const inlineKeyboard = [
-      [
-        {
-          text: hasActiveSubscription
-            ? '💳 Продлить доступ'
-            : '✨ Присоединиться',
-          callback_data: CALLBACKS.joinTheCycle,
-        },
-      ],
-      [
-        {
-          text: '📖 Что внутри клуба',
-          callback_data: CALLBACKS.insideTheCycle,
-        },
-      ],
-    ];
+    return { hasActiveSubscription };
+  }
 
+  private async sendReplyKeyboard(chatId: string | number) {
     await this.telegram.sendMessage(
       chatId,
-      [
-        '🌸 <b>The Cycle</b>',
-        '',
-        'Клуб для женщин, которые хотят лучше понимать свое тело, цикл, эмоции и внутренние ритмы.',
-        '',
-        'Внутри: экспертные материалы, поддержка, практики, эфиры и бережное сообщество.',
-        '',
-        'Подходит, если вы хотите регулярную опору, больше ясности и мягкое движение к себе.',
-      ].join('\n'),
-      { inline_keyboard: inlineKeyboard },
+      this.flow.getReplyKeyboardMessage(),
+      this.flow.buildReplyKeyboard(),
     );
   }
 
-  private async sendInsideTheCycle(chatId: string | number) {
-    await this.telegram.sendMessage(
-      chatId,
-      [
-        '📖 <b>Что внутри клуба</b>',
-        '',
-        '• тематические материалы по циклу и состоянию',
-        '• практики для самонаблюдения и восстановления',
-        '• эфиры и ответы эксперта',
-        '• закрытое пространство поддержки',
-        '• обновления и новые материалы в течение подписки',
-      ].join('\n'),
-    );
-  }
-
-  private async startTheCyclePayment(chatId: string | number, user: User) {
-    const product = await this.products.getTheCycleProduct();
+  private async startProductPayment(
+    chatId: string | number,
+    user: User,
+    productSlug: string,
+  ) {
+    const product = await this.products.getActiveProductBySlug(productSlug);
 
     const hasActiveSubscription =
       await this.subscriptions.hasActiveSubscription(user.id, product.id);
@@ -261,27 +226,38 @@ export class BotService {
       productSlug: product.slug,
     });
 
-    const paymentButton =
-      paymentAttempt.provider === PaymentProvider.Mock
-        ? {
-            text: '💳 Подтвердить тестовую оплату',
-            callback_data: `${MOCK_PAYMENT_PREFIX}${paymentAttempt.id}`,
-          }
-        : { text: '💳 Оплатить', url: paymentAttempt.paymentUrl };
+    const isMockPayment = paymentAttempt.provider === PaymentProvider.Mock;
+    const paymentButton = isMockPayment
+      ? {
+          text: this.flow.getPaymentButtonText(true),
+          callback_data: `${MOCK_PAYMENT_PREFIX}${paymentAttempt.id}`,
+        }
+      : {
+          text: this.flow.getPaymentButtonText(false),
+          url: paymentAttempt.paymentUrl,
+        };
 
     await this.telegram.sendMessage(
       chatId,
       [
-        hasActiveSubscription
-          ? '✨ Для продления доступа к The Cycle завершите оплату.'
-          : '✨ Для присоединения к The Cycle завершите оплату.',
+        this.flow.buildPaymentIntro(hasActiveSubscription, {
+          productTitle: product.title,
+        }),
         '',
-        `Сумма: ${paymentAttempt.amount} ${paymentAttempt.currency}`,
+        this.flow.buildPaymentAmountLine({
+          amount: paymentAttempt.amount,
+          currency: paymentAttempt.currency,
+        }),
       ].join('\n'),
       {
         inline_keyboard: [
           [paymentButton],
-          [{ text: '💬 Саппорт', callback_data: CALLBACKS.supportOpen }],
+          [
+            {
+              text: this.flow.getSupportOpenButtonText(),
+              callback_data: SUPPORT_OPEN_CALLBACK,
+            },
+          ],
         ],
       },
     );
@@ -303,7 +279,7 @@ export class BotService {
     );
     await this.telegram.sendMessage(
       chatId,
-      '✅ Тестовая оплата подтверждена. Подписка активирована.',
+      this.flow.getMockPaymentSuccessMessage(),
     );
   }
 
@@ -313,48 +289,35 @@ export class BotService {
     if (subscriptions.length === 0) {
       await this.telegram.sendMessage(
         chatId,
-        'У вас пока нет активных подписок.',
+        this.flow.getEmptySubscriptionsMessage(),
       );
       return;
     }
 
-    const lines = subscriptions.flatMap((subscription) => [
-      `• ${subscription.product.title}`,
-      subscription.expiresAt
-        ? `  Активна до: ${subscription.expiresAt.toLocaleDateString('ru-RU')}`
-        : '  Активна без даты окончания',
-    ]);
+    const lines = subscriptions.map((subscription) =>
+      this.flow.getActiveSubscriptionMessage({
+        productTitle: subscription.product.title,
+        date: this.formatSubscriptionDate(subscription.expiresAt),
+      }),
+    );
 
     await this.telegram.sendMessage(
       chatId,
-      ['📦 <b>Мои подписки</b>', '', ...lines].join('\n'),
+      [this.flow.getSubscriptionsTitle(), '', ...lines].join('\n'),
     );
   }
 
   private async sendSupportTopics(chatId: string | number) {
-    await this.telegram.sendMessage(chatId, 'Выберите тему обращения:', {
-      inline_keyboard: [
-        [
-          {
-            text: '💳 Проблема с оплатой',
-            callback_data: 'support:topic:payment',
-          },
-        ],
-        [
-          {
-            text: '📚 Нет доступа к продукту',
-            callback_data: 'support:topic:access',
-          },
-        ],
-        [{ text: '❓ Вопрос по клубу', callback_data: 'support:topic:club' }],
-        [
-          {
-            text: '⚙️ Техническая проблема',
-            callback_data: 'support:topic:technical',
-          },
-        ],
-        [{ text: '📝 Другое', callback_data: 'support:topic:other' }],
-      ],
+    await this.telegram.sendMessage(chatId, this.flow.getSupportPrompt(), {
+      inline_keyboard: this.flow.buildSupportTopicsInlineKeyboard(),
     });
+  }
+
+  private formatSubscriptionDate(expiresAt?: Date | null) {
+    if (!expiresAt) {
+      return this.flow.getSubscriptionNoExpirationMessage();
+    }
+
+    return expiresAt.toLocaleDateString('ru-RU');
   }
 }

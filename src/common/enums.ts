@@ -17,6 +17,11 @@ export enum PaymentProvider {
   Mock = 'mock',
 }
 
+export enum ProductType {
+  Subscription = 'subscription',
+  OneTime = 'one_time',
+}
+
 export enum SupportRequestStatus {
   Open = 'open',
   InProgress = 'in_progress',

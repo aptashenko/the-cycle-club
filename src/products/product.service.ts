@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { Repository } from 'typeorm';
+import { ProductType } from '../common/enums';
 import { Product } from './product.entity';
 
 export const THE_CYCLE_SLUG = 'the-cycle';
@@ -13,6 +14,7 @@ type ProductSeed = {
   description: string;
   price: string;
   currency: string;
+  type: ProductType;
   isActive: boolean;
 };
 
@@ -34,10 +36,14 @@ export class ProductService implements OnModuleInit {
   }
 
   async getTheCycleProduct(): Promise<Product> {
-    const product = await this.findBySlug(THE_CYCLE_SLUG);
+    return this.getActiveProductBySlug(THE_CYCLE_SLUG);
+  }
+
+  async getActiveProductBySlug(slug: string): Promise<Product> {
+    const product = await this.findBySlug(slug);
 
     if (!product) {
-      return this.ensureProduct(this.getProductSeed(THE_CYCLE_SLUG));
+      return this.ensureProduct(this.getProductSeed(slug));
     }
 
     return product;
@@ -62,6 +68,7 @@ export class ProductService implements OnModuleInit {
     product.description = productSeed.description;
     product.price = productSeed.price;
     product.currency = productSeed.currency;
+    product.type = productSeed.type;
     product.isActive = productSeed.isActive;
 
     return this.productRepository.save(product);
@@ -100,12 +107,23 @@ export class ProductService implements OnModuleInit {
       description: values.description,
       price: values.price,
       currency: values.currency,
+      type: values.type ?? ProductType.Subscription,
       isActive: values.isActive,
     };
 
     for (const [key, value] of Object.entries(productSeed)) {
       if (key === 'isActive') {
         if (typeof value !== 'boolean') {
+          throw new Error(`Invalid product seed field: ${key}`);
+        }
+        continue;
+      }
+
+      if (key === 'type') {
+        if (
+          value !== ProductType.Subscription &&
+          value !== ProductType.OneTime
+        ) {
           throw new Error(`Invalid product seed field: ${key}`);
         }
         continue;

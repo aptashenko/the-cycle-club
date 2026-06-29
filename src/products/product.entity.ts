@@ -6,6 +6,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { ProductType } from '../common/enums';
 import { PaymentAttempt } from '../payments/payment-attempt.entity';
 import { Subscription } from '../subscriptions/subscription.entity';
 
@@ -28,6 +29,9 @@ export class Product {
 
   @Column({ default: 'UAH' })
   currency: string;
+
+  @Column({ default: ProductType.Subscription })
+  type: ProductType;
 
   @Column({ default: true })
   isActive: boolean;

@@ -98,6 +98,27 @@ Then open Telegram and send:
 
 ## Client Flow
 
+Client flow content is configured in:
+
+```text
+src/bot/bot-flow.json
+```
+
+The config controls screen text, inline buttons, reply keyboard labels, support topics, payment prompt copy, and subscription messages.
+
+Supported screen button types:
+
+- `target` - opens another configured screen through `flow:<screenId>`.
+- `action: "startPayment"` with `productSlug` - starts payment for the product.
+- `activeText` - optional button text used when the user already has an active subscription for the screen product.
+- `visible` - optional visibility rule: `always`, `activeSubscription`, or `inactiveSubscription`.
+
+Product price/currency and active status are still configured in:
+
+```text
+src/products/products.json
+```
+
 ### 1. Start
 
 User sends:

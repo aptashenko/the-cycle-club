@@ -7,6 +7,7 @@ import { SupportModule } from '../support/support.module';
 import { UserActivityModule } from '../user-activity/user-activity.module';
 import { UsersModule } from '../users/users.module';
 import { BotController } from './bot.controller';
+import { BotFlowService } from './bot-flow.service';
 import { BotPollingService } from './bot-polling.service';
 import { BotService } from './bot.service';
 
@@ -21,6 +22,6 @@ import { BotService } from './bot.service';
     UserActivityModule,
   ],
   controllers: [BotController],
-  providers: [BotService, BotPollingService],
+  providers: [BotService, BotPollingService, BotFlowService],
 })
 export class BotModule {}

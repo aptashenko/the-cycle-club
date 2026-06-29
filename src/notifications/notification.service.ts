@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AdminTelegramApiService } from '../admin-bot/admin-telegram-api.service';
+import { BotFlowService } from '../bot/bot-flow.service';
+import { ProductType } from '../common/enums';
 import { PaymentAttempt } from '../payments/payment-attempt.entity';
 import { Subscription } from '../subscriptions/subscription.entity';
 import { SupportRequest } from '../support/support-request.entity';
@@ -15,12 +17,22 @@ export class NotificationService {
     private readonly config: ConfigService,
     private readonly telegram: TelegramApiService,
     private readonly adminTelegram: AdminTelegramApiService,
+    private readonly flow: BotFlowService,
   ) {}
 
-  async notifyPaymentSuccess(paymentAttempt: PaymentAttempt) {
+  async notifyPaymentSuccess(
+    paymentAttempt: PaymentAttempt,
+    subscription?: Subscription,
+  ) {
     await this.telegram.sendMessage(
       paymentAttempt.user.telegramId,
-      '✅ Оплата прошла успешно. Ваша подписка The Cycle активирована ❤️',
+      this.flow.getPaymentSuccessMessage(
+        {
+          productTitle: paymentAttempt.product.title,
+          date: this.formatSubscriptionDate(subscription),
+        },
+        paymentAttempt.product.type === ProductType.Subscription,
+      ),
     );
 
     await this.sendAdminMessage(
@@ -221,5 +233,15 @@ export class NotificationService {
     const username = user.username ? `(@${user.username})` : '';
 
     return [fullName || 'Без имени', username].filter(Boolean).join(' ');
+  }
+
+  private formatSubscriptionDate(subscription?: Subscription) {
+    if (!subscription?.expiresAt) {
+      return '-';
+    }
+
+    return subscription.expiresAt.toLocaleDateString('ru-RU', {
+      timeZone: 'Europe/Paris',
+    });
   }
 }

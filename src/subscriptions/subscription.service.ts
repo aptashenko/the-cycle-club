@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, IsNull, MoreThan, Repository } from 'typeorm';
-import { SubscriptionStatus } from '../common/enums';
+import { ProductType, SubscriptionStatus } from '../common/enums';
 import { Product } from '../products/product.entity';
 import { User } from '../users/user.entity';
 import { Subscription } from './subscription.entity';
@@ -40,14 +40,22 @@ export class SubscriptionService {
   async listActiveForUser(userId: string): Promise<Subscription[]> {
     const now = new Date();
 
-    return this.subscriptionRepository.find({
-      where: [
-        { userId, status: SubscriptionStatus.Active, expiresAt: MoreThan(now) },
-        { userId, status: SubscriptionStatus.Active, expiresAt: IsNull() },
-      ],
-      relations: { product: true },
-      order: { createdAt: 'DESC' },
-    });
+    return this.subscriptionRepository
+      .createQueryBuilder('subscription')
+      .innerJoinAndSelect('subscription.product', 'product')
+      .where('subscription.userId = :userId', { userId })
+      .andWhere('subscription.status = :status', {
+        status: SubscriptionStatus.Active,
+      })
+      .andWhere('product.type = :productType', {
+        productType: ProductType.Subscription,
+      })
+      .andWhere(
+        '(subscription.expiresAt > :now OR subscription.expiresAt IS NULL)',
+        { now },
+      )
+      .orderBy('subscription.createdAt', 'DESC')
+      .getMany();
   }
 
   async findExpiringForReminder(daysBefore: 5 | 1): Promise<Subscription[]> {
