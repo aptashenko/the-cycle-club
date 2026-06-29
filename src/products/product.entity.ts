@@ -10,6 +10,11 @@ import { ProductType } from '../common/enums';
 import { PaymentAttempt } from '../payments/payment-attempt.entity';
 import { Subscription } from '../subscriptions/subscription.entity';
 
+export type ProductDownloadFile = {
+  title: string;
+  url: string;
+};
+
 @Entity('products')
 export class Product {
   @PrimaryGeneratedColumn('uuid')
@@ -32,6 +37,9 @@ export class Product {
 
   @Column({ default: ProductType.Subscription })
   type: ProductType;
+
+  @Column({ name: 'download_files', type: 'jsonb', nullable: true })
+  downloadFiles?: ProductDownloadFile[] | null;
 
   @Column({ default: true })
   isActive: boolean;

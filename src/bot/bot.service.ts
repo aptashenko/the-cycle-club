@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PaymentProvider } from '../common/enums';
+import { PaymentProvider, ProductType } from '../common/enums';
 import { PaymentService } from '../payments/payment.service';
 import { ProductService } from '../products/product.service';
 import { SubscriptionService } from '../subscriptions/subscription.service';
@@ -240,9 +240,13 @@ export class BotService {
     await this.telegram.sendMessage(
       chatId,
       [
-        this.flow.buildPaymentIntro(hasActiveSubscription, {
-          productTitle: product.title,
-        }),
+        this.flow.buildPaymentIntro(
+          hasActiveSubscription,
+          {
+            productTitle: product.title,
+          },
+          product.type === ProductType.Subscription,
+        ),
         '',
         this.flow.buildPaymentAmountLine({
           amount: paymentAttempt.amount,
@@ -279,7 +283,9 @@ export class BotService {
     );
     await this.telegram.sendMessage(
       chatId,
-      this.flow.getMockPaymentSuccessMessage(),
+      this.flow.getMockPaymentSuccessMessage(
+        paymentAttempt.product.type === ProductType.Subscription,
+      ),
     );
   }
 

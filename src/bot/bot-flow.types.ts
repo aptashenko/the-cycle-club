@@ -39,11 +39,14 @@ export type SupportConfig = {
 export type PaymentConfig = {
   activeIntro: string[];
   inactiveIntro: string[];
+  nonSubscriptionIntro: string[];
   amountLine: string;
   payButtonText: string;
   mockPayButtonText: string;
   successMessage: string[];
   nonSubscriptionSuccessMessage: string[];
+  downloadMessage: string[];
+  nonSubscriptionMockSuccessMessage: string;
   mockSuccessMessage: string;
 };
 

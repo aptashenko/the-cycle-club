@@ -119,6 +119,19 @@ Product price/currency and active status are still configured in:
 src/products/products.json
 ```
 
+One-time products can include downloadable files:
+
+```json
+"downloadFiles": [
+  {
+    "title": "Скачать PDF",
+    "url": "https://your-domain.com/files/material.pdf"
+  }
+]
+```
+
+After successful payment for a `one_time` product, the bot sends these files as Telegram URL buttons.
+
 ### 1. Start
 
 User sends:

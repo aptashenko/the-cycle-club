@@ -24,6 +24,9 @@ export class NotificationService {
     paymentAttempt: PaymentAttempt,
     subscription?: Subscription,
   ) {
+    const isSubscriptionProduct =
+      paymentAttempt.product.type === ProductType.Subscription;
+
     await this.telegram.sendMessage(
       paymentAttempt.user.telegramId,
       this.flow.getPaymentSuccessMessage(
@@ -31,9 +34,13 @@ export class NotificationService {
           productTitle: paymentAttempt.product.title,
           date: this.formatSubscriptionDate(subscription),
         },
-        paymentAttempt.product.type === ProductType.Subscription,
+        isSubscriptionProduct,
       ),
     );
+
+    if (!isSubscriptionProduct) {
+      await this.sendDownloadLinks(paymentAttempt);
+    }
 
     await this.sendAdminMessage(
       [
@@ -206,6 +213,42 @@ export class NotificationService {
         this.adminTelegram.sendMessage(chatId, text, replyMarkup),
       ),
     );
+  }
+
+  private async sendDownloadLinks(paymentAttempt: PaymentAttempt) {
+    const downloadFiles = paymentAttempt.product.downloadFiles ?? [];
+
+    if (downloadFiles.length === 0) {
+      return;
+    }
+
+    await this.telegram.sendMessage(
+      paymentAttempt.user.telegramId,
+      this.flow.getDownloadMessage({
+        productTitle: paymentAttempt.product.title,
+      }),
+      {
+        inline_keyboard: downloadFiles.map((file) => [
+          {
+            text: file.title,
+            url: this.buildDownloadUrl(file.url),
+          },
+        ]),
+      },
+    );
+  }
+
+  private buildDownloadUrl(url: string): string {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+
+    const appUrl = this.config
+      .get<string>('APP_URL', 'http://localhost:3000')
+      .replace(/\/+$/, '');
+    const path = url.startsWith('/') ? url : `/${url}`;
+
+    return `${appUrl}${path}`;
   }
 
   private getAdminRecipients(includeManager: boolean) {

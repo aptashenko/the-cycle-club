@@ -6,6 +6,37 @@
     "price": "1.00",
     "currency": "UAH",
     "type": "subscription",
+    "downloadFiles": [],
+    "isActive": true
+  },
+  {
+    "slug": "material-1",
+    "title": "Материал 1",
+    "description": "Разовый материал 1.",
+    "price": "1.00",
+    "currency": "UAH",
+    "type": "one_time",
+    "downloadFiles": [
+      {
+        "title": "Скачать материал 1",
+        "url": "/files/nutriciolog_03.pdf"
+      }
+    ],
+    "isActive": true
+  },
+  {
+    "slug": "material-2",
+    "title": "Материал 2",
+    "description": "Разовый материал 2.",
+    "price": "1.00",
+    "currency": "UAH",
+    "type": "one_time",
+    "downloadFiles": [
+      {
+        "title": "Скачать материал 2",
+        "url": "/files/guide_GRVI.pdf"
+      }
+    ],
     "isActive": true
   }
 ]

@@ -4,7 +4,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { Repository } from 'typeorm';
 import { ProductType } from '../common/enums';
-import { Product } from './product.entity';
+import { Product, ProductDownloadFile } from './product.entity';
 
 export const THE_CYCLE_SLUG = 'the-cycle';
 
@@ -15,6 +15,7 @@ type ProductSeed = {
   price: string;
   currency: string;
   type: ProductType;
+  downloadFiles: ProductDownloadFile[];
   isActive: boolean;
 };
 
@@ -69,6 +70,7 @@ export class ProductService implements OnModuleInit {
     product.price = productSeed.price;
     product.currency = productSeed.currency;
     product.type = productSeed.type;
+    product.downloadFiles = productSeed.downloadFiles;
     product.isActive = productSeed.isActive;
 
     return this.productRepository.save(product);
@@ -108,6 +110,10 @@ export class ProductService implements OnModuleInit {
       price: values.price,
       currency: values.currency,
       type: values.type ?? ProductType.Subscription,
+      downloadFiles: this.parseDownloadFiles(
+        values.downloadFiles,
+        String(values.slug ?? 'unknown'),
+      ),
       isActive: values.isActive,
     };
 
@@ -129,11 +135,54 @@ export class ProductService implements OnModuleInit {
         continue;
       }
 
+      if (key === 'downloadFiles') {
+        continue;
+      }
+
       if (typeof value !== 'string' || value.length === 0) {
         throw new Error(`Invalid product seed field: ${key}`);
       }
     }
 
     return productSeed as ProductSeed;
+  }
+
+  private parseDownloadFiles(
+    value: unknown,
+    productSlug: string,
+  ): ProductDownloadFile[] {
+    if (value === undefined) {
+      return [];
+    }
+
+    if (!Array.isArray(value)) {
+      throw new Error(`Invalid downloadFiles for product seed: ${productSlug}`);
+    }
+
+    return value.map((file, index) => {
+      if (!file || typeof file !== 'object' || Array.isArray(file)) {
+        throw new Error(
+          `Invalid downloadFiles.${index} for product seed: ${productSlug}`,
+        );
+      }
+
+      const values = file as Record<string, unknown>;
+      if (typeof values.title !== 'string' || values.title.length === 0) {
+        throw new Error(
+          `Invalid downloadFiles.${index}.title for product seed: ${productSlug}`,
+        );
+      }
+
+      if (typeof values.url !== 'string' || values.url.length === 0) {
+        throw new Error(
+          `Invalid downloadFiles.${index}.url for product seed: ${productSlug}`,
+        );
+      }
+
+      return {
+        title: values.title,
+        url: values.url,
+      };
+    });
   }
 }

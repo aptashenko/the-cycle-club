@@ -12,6 +12,7 @@ import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { SupportModule } from './support/support.module';
 import { UsersModule } from './users/users.module';
 import { buildDataSourceOptions } from './database/typeorm.config';
+import { FilesController } from './files/files.controller';
 
 @Module({
   imports: [
@@ -36,5 +37,6 @@ import { buildDataSourceOptions } from './database/typeorm.config';
     AdminBotModule,
     SchedulerModule,
   ],
+  controllers: [FilesController],
 })
 export class AppModule {}

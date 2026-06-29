@@ -136,10 +136,13 @@ export class BotFlowService {
   buildPaymentIntro(
     hasActiveSubscription: boolean,
     values: RenderValues,
+    isSubscriptionProduct = true,
   ): string {
-    const intro = hasActiveSubscription
-      ? this.config.payment.activeIntro
-      : this.config.payment.inactiveIntro;
+    const intro = isSubscriptionProduct
+      ? hasActiveSubscription
+        ? this.config.payment.activeIntro
+        : this.config.payment.inactiveIntro
+      : this.config.payment.nonSubscriptionIntro;
 
     return this.renderLines(intro, values);
   }
@@ -165,8 +168,14 @@ export class BotFlowService {
     return this.renderLines(lines, values);
   }
 
-  getMockPaymentSuccessMessage(): string {
-    return this.config.payment.mockSuccessMessage;
+  getDownloadMessage(values: RenderValues): string {
+    return this.renderLines(this.config.payment.downloadMessage, values);
+  }
+
+  getMockPaymentSuccessMessage(isSubscriptionProduct = true): string {
+    return isSubscriptionProduct
+      ? this.config.payment.mockSuccessMessage
+      : this.config.payment.nonSubscriptionMockSuccessMessage;
   }
 
   getSubscriptionsTitle(): string {
@@ -444,6 +453,10 @@ export class BotFlowService {
         payment.inactiveIntro,
         'payment.inactiveIntro',
       ),
+      nonSubscriptionIntro: this.parseStringArray(
+        payment.nonSubscriptionIntro,
+        'payment.nonSubscriptionIntro',
+      ),
       amountLine: this.assertString(payment.amountLine, 'payment.amountLine'),
       payButtonText: this.assertString(
         payment.payButtonText,
@@ -460,6 +473,14 @@ export class BotFlowService {
       nonSubscriptionSuccessMessage: this.parseTextLines(
         payment.nonSubscriptionSuccessMessage,
         'payment.nonSubscriptionSuccessMessage',
+      ),
+      downloadMessage: this.parseTextLines(
+        payment.downloadMessage,
+        'payment.downloadMessage',
+      ),
+      nonSubscriptionMockSuccessMessage: this.assertString(
+        payment.nonSubscriptionMockSuccessMessage,
+        'payment.nonSubscriptionMockSuccessMessage',
       ),
       mockSuccessMessage: this.assertString(
         payment.mockSuccessMessage,
