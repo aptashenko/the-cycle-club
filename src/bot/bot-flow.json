@@ -180,7 +180,7 @@
         [
           {
             "text": "Оставить заявку",
-            "action": "openSupport"
+            "url": "https://t.me/assistant_nicolaeva"
           }
         ]
       ]

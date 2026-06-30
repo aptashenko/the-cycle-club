@@ -16,7 +16,8 @@ export const SUPPORT_TOPIC_CALLBACK_PREFIX = 'support:topic:';
 
 type InlineKeyboardButton = {
   text: string;
-  callback_data: string;
+  callback_data?: string;
+  url?: string;
 };
 
 type InlineKeyboard = InlineKeyboardButton[][];
@@ -214,6 +215,13 @@ export class BotFlowService {
       };
     }
 
+    if (button.url) {
+      return {
+        text,
+        url: button.url,
+      };
+    }
+
     if (button.action === 'startPayment' && button.productSlug) {
       return {
         text,
@@ -363,6 +371,10 @@ export class BotFlowService {
       parsed.target = this.assertString(button.target, `${path}.target`);
     }
 
+    if (button.url !== undefined) {
+      parsed.url = this.assertString(button.url, `${path}.url`);
+    }
+
     if (button.action !== undefined) {
       const action = this.assertString(button.action, `${path}.action`);
       if (action !== 'startPayment' && action !== 'openSupport') {
@@ -382,8 +394,8 @@ export class BotFlowService {
       parsed.visible = this.parseVisibility(button.visible, `${path}.visible`);
     }
 
-    if (!parsed.target && !parsed.action) {
-      throw new Error(`${path} must define target or action`);
+    if (!parsed.target && !parsed.url && !parsed.action) {
+      throw new Error(`${path} must define target, url, or action`);
     }
 
     if (parsed.action === 'startPayment' && !parsed.productSlug) {

@@ -7,6 +7,7 @@ export type FlowButton = {
   text: string;
   activeText?: string;
   target?: string;
+  url?: string;
   action?: 'startPayment' | 'openSupport';
   productSlug?: string;
   visible?: FlowButtonVisibility;

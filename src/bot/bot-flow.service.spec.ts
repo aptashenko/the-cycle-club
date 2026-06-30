@@ -30,6 +30,15 @@ describe('BotFlowService', () => {
     expect(keyboard?.[0]?.[0]?.text.length).toBeGreaterThan(0);
   });
 
+  it('builds consultation button as manager Telegram link', () => {
+    const keyboard = service.buildScreenInlineKeyboard('consultation');
+
+    expect(keyboard?.[0]?.[0]).toEqual({
+      text: 'Оставить заявку',
+      url: 'https://t.me/assistant_nicolaeva',
+    });
+  });
+
   it('resolves support topics from callbacks', () => {
     expect(
       service.getSupportTopicByCallback('support:topic:payment')?.requestTopic,
