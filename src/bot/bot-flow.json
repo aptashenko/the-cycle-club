@@ -129,7 +129,7 @@
       "buttons": [
         [
           {
-            "text": "Купить",
+            "text": "Купить ({{price}} {{currency}})",
             "action": "startPayment",
             "productSlug": "material-2"
           }
@@ -157,7 +157,7 @@
       "buttons": [
         [
           {
-            "text": "Купить",
+            "text": "Купить {{price}} {{currency}}",
             "action": "startPayment",
             "productSlug": "material-1"
           }

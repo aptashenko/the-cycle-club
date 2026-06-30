@@ -24,6 +24,7 @@ type InlineKeyboard = InlineKeyboardButton[][];
 
 type FlowButtonContext = {
   hasActiveSubscription?: boolean;
+  productsBySlug?: Record<string, RenderValues>;
 };
 
 type RenderValues = Record<string, string | number>;
@@ -203,10 +204,11 @@ export class BotFlowService {
     button: FlowButton,
     context: FlowButtonContext,
   ): InlineKeyboardButton {
-    const text =
+    const rawText =
       context.hasActiveSubscription && button.activeText
         ? button.activeText
         : button.text;
+    const text = this.renderButtonText(button, rawText, context);
 
     if (button.target) {
       return {
@@ -237,6 +239,20 @@ export class BotFlowService {
     }
 
     throw new Error(`Invalid bot flow button: ${JSON.stringify(button)}`);
+  }
+
+  private renderButtonText(
+    button: FlowButton,
+    text: string,
+    context: FlowButtonContext,
+  ): string {
+    if (button.action !== 'startPayment' || !button.productSlug) {
+      return text;
+    }
+
+    const values = context.productsBySlug?.[button.productSlug];
+
+    return values ? this.renderLine(text, values) : text;
   }
 
   private isButtonVisible(

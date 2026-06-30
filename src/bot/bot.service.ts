@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PaymentProvider, ProductType } from '../common/enums';
 import { PaymentService } from '../payments/payment.service';
+import { Product } from '../products/product.entity';
 import { ProductService } from '../products/product.service';
 import { SubscriptionService } from '../subscriptions/subscription.service';
 import { SupportService } from '../support/support.service';
@@ -182,17 +183,66 @@ export class BotService {
   }
 
   private async buildFlowScreenContext(screen: FlowScreen, userId: string) {
+    const productSlugs = this.getFlowScreenProductSlugs(screen);
+    const activeProductsBySlug = await this.getActiveProductsBySlug(
+      productSlugs,
+    );
+    const productsBySlug =
+      this.buildFlowScreenProductValues(activeProductsBySlug);
+
     if (!screen.productSlug) {
-      return {};
+      return { productsBySlug };
     }
 
-    const product = await this.products.getActiveProductBySlug(
-      screen.productSlug,
-    );
+    const product = activeProductsBySlug[screen.productSlug];
     const hasActiveSubscription =
       await this.subscriptions.hasActiveSubscription(userId, product.id);
 
-    return { hasActiveSubscription };
+    return { hasActiveSubscription, productsBySlug };
+  }
+
+  private getFlowScreenProductSlugs(screen: FlowScreen): string[] {
+    const productSlugs = new Set<string>();
+
+    if (screen.productSlug) {
+      productSlugs.add(screen.productSlug);
+    }
+
+    for (const row of screen.buttons ?? []) {
+      for (const button of row) {
+        if (button.action === 'startPayment' && button.productSlug) {
+          productSlugs.add(button.productSlug);
+        }
+      }
+    }
+
+    return [...productSlugs];
+  }
+
+  private async getActiveProductsBySlug(
+    productSlugs: string[],
+  ): Promise<Record<string, Product>> {
+    const products = await Promise.all(
+      productSlugs.map((slug) => this.products.getActiveProductBySlug(slug)),
+    );
+
+    return Object.fromEntries(
+      products.map((product) => [product.slug, product]),
+    );
+  }
+
+  private buildFlowScreenProductValues(
+    productsBySlug: Record<string, Product>,
+  ) {
+    return Object.fromEntries(
+      Object.entries(productsBySlug).map(([slug, product]) => [
+        slug,
+        {
+          price: product.price,
+          currency: product.currency,
+        },
+      ]),
+    );
   }
 
   private async sendReplyKeyboard(chatId: string | number) {

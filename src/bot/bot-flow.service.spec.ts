@@ -34,9 +34,22 @@ describe('BotFlowService', () => {
     const keyboard = service.buildScreenInlineKeyboard('consultation');
 
     expect(keyboard?.[0]?.[0]).toEqual({
-      text: 'Оставить заявку',
+      text: 'Связаться с ассистентом',
       url: 'https://t.me/assistant_nicolaeva',
     });
+  });
+
+  it('renders payment button product price from context', () => {
+    const keyboard = service.buildScreenInlineKeyboard('material-1', {
+      productsBySlug: {
+        'material-2': {
+          price: '1.00',
+          currency: 'UAH',
+        },
+      },
+    });
+
+    expect(keyboard?.[0]?.[0]?.text).toBe('Купить 1.00 UAH');
   });
 
   it('resolves support topics from callbacks', () => {
