@@ -96,22 +96,6 @@ export class NotificationService {
   }
 
   async notifyAbandonedPayment(paymentAttempt: PaymentAttempt) {
-    await this.telegram.sendMessage(
-      paymentAttempt.user.telegramId,
-      'Вы начали оформление участия, но оплата не была завершена.\n\nЕсли возникла проблема — напишите в поддержку.',
-      {
-        inline_keyboard: [
-          [
-            {
-              text: '💳 Завершить оплату',
-              url: paymentAttempt.paymentUrl,
-            },
-          ],
-          [{ text: '💬 Саппорт', callback_data: 'support:open' }],
-        ],
-      },
-    );
-
     await this.sendAdminMessage(
       [
         '⚠️ <b>Оплата не завершена</b>',

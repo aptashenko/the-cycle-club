@@ -302,16 +302,7 @@ It finds `payment_attempts` where:
 Then it:
 
 - marks them as `abandoned`;
-- sends a reminder to the user;
 - sends an admin notification.
-
-Reminder text:
-
-```text
-Вы начали оформление участия, но оплата не была завершена.
-
-Если возникла проблема — напишите в поддержку.
-```
 
 ## Closed Group Access
 
