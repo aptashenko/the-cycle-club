@@ -55,6 +55,7 @@ TELEGRAM_BOT_TOKEN=your_bot_token
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/the_cycle_club
 DATABASE_MIGRATIONS_RUN=true
 TELEGRAM_BOT_MODE=polling
+CLOSED_GROUP_CHAT_ID=
 PAYMENT_MODE=mock
 APP_URL=http://localhost:3000
 ADMIN_TELEGRAM_ID=your_telegram_id
@@ -311,6 +312,21 @@ Reminder text:
 
 Если возникла проблема — напишите в поддержку.
 ```
+
+## Closed Group Access
+
+Set `CLOSED_GROUP_CHAT_ID` to the closed Telegram group chat ID.
+
+The main bot from `TELEGRAM_BOT_TOKEN` must be added to that group as an admin with permission to ban users.
+
+Every hour, the app finds active subscriptions whose `expires_at` is in the past. For each expired subscription it:
+
+- removes the Telegram user from `CLOSED_GROUP_CHAT_ID`;
+- marks the subscription as `expired`;
+- updates the user's membership status.
+- sends the user a bot message with a renewal button.
+
+The removal uses Telegram's ban/unban flow, so the user is kicked from the group but can join again later after renewal.
 
 ## Database Models
 

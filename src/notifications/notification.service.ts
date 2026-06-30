@@ -201,6 +201,29 @@ export class NotificationService {
     );
   }
 
+  async notifySubscriptionExpired(subscription: Subscription) {
+    await this.telegram.sendMessage(
+      subscription.user.telegramId,
+      [
+        '🔒 <b>Доступ к группе закрыт</b>',
+        '',
+        `Ваша подписка на ${subscription.product.title} закончилась.`,
+        'Продлите, пожалуйста, подписку, чтобы снова получить доступ.',
+      ].join('\n'),
+      {
+        inline_keyboard: [
+          [
+            {
+              text: '💳 Продлить подписку',
+              callback_data: `product:${subscription.product.slug}`,
+            },
+          ],
+          [{ text: '💬 Саппорт', callback_data: 'support:open' }],
+        ],
+      },
+    );
+  }
+
   private async sendAdminMessage(
     text: string,
     includeManager = false,

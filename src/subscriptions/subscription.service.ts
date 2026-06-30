@@ -80,6 +80,23 @@ export class SubscriptionService {
     });
   }
 
+  async findExpiredActive(limit = 100): Promise<Subscription[]> {
+    return this.subscriptionRepository
+      .createQueryBuilder('subscription')
+      .innerJoinAndSelect('subscription.user', 'user')
+      .innerJoinAndSelect('subscription.product', 'product')
+      .where('subscription.status = :status', {
+        status: SubscriptionStatus.Active,
+      })
+      .andWhere('subscription.expiresAt <= :now', { now: new Date() })
+      .andWhere('product.type = :productType', {
+        productType: ProductType.Subscription,
+      })
+      .orderBy('subscription.expiresAt', 'ASC')
+      .take(limit)
+      .getMany();
+  }
+
   async markExpirationReminderSent(
     subscription: Subscription,
     daysBefore: 5 | 1,
@@ -91,6 +108,14 @@ export class SubscriptionService {
     }
 
     return this.subscriptionRepository.save(subscription);
+  }
+
+  async markExpired(subscription: Subscription): Promise<Subscription> {
+    subscription.status = SubscriptionStatus.Expired;
+    const saved = await this.subscriptionRepository.save(subscription);
+    await this.refreshUserMembershipStatus(subscription.userId);
+
+    return saved;
   }
 
   async activate(user: User, product: Product): Promise<Subscription> {
@@ -131,5 +156,31 @@ export class SubscriptionService {
     await this.userRepository.save(user);
 
     return saved;
+  }
+
+  private async refreshUserMembershipStatus(userId: string) {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      return;
+    }
+
+    const now = new Date();
+    const activeSubscriptions = await this.subscriptionRepository.count({
+      where: [
+        {
+          userId,
+          status: SubscriptionStatus.Active,
+          expiresAt: MoreThan(now),
+        },
+        {
+          userId,
+          status: SubscriptionStatus.Active,
+          expiresAt: IsNull(),
+        },
+      ],
+    });
+
+    user.membershipStatus = activeSubscriptions > 0 ? 'active' : 'none';
+    await this.userRepository.save(user);
   }
 }

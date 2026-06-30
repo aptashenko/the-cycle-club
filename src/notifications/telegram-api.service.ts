@@ -45,6 +45,26 @@ export class TelegramApiService {
     });
   }
 
+  async removeChatMember(chatId: string | number, userId: string | number) {
+    const banResponse = await this.request('banChatMember', {
+      chat_id: chatId,
+      user_id: userId,
+      revoke_messages: false,
+    });
+
+    if (!banResponse.ok) {
+      return banResponse;
+    }
+
+    await this.request('unbanChatMember', {
+      chat_id: chatId,
+      user_id: userId,
+      only_if_banned: true,
+    });
+
+    return banResponse;
+  }
+
   async getUpdates(offset?: number): Promise<TelegramUpdate[]> {
     const data = await this.request<TelegramUpdate[]>('getUpdates', {
       offset,
