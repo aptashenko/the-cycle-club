@@ -42,7 +42,7 @@ describe('BotFlowService', () => {
   it('renders payment button product price from context', () => {
     const keyboard = service.buildScreenInlineKeyboard('material-1', {
       productsBySlug: {
-        'material-2': {
+        'material-1': {
           price: '1.00',
           currency: 'UAH',
         },

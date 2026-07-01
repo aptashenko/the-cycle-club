@@ -59,7 +59,7 @@ export class PaymentsController {
       '<p class="note">Вернитесь в Telegram и откройте раздел “Мои подписки”. Если оплата прошла успешно, доступ появится там после подтверждения WayForPay.</p>',
       '<div class="actions">',
       '<button type="button" onclick="window.close()">Закрыть страницу</button>',
-      '<a href="https://t.me/" rel="noopener">Открыть Telegram</a>',
+      '<a href="https://t.me/the_cycle_program_bot" rel="noopener">Открыть Telegram</a>',
       '</div>',
       '</main>',
       '</body>',
