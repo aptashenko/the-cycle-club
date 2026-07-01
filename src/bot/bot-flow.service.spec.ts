@@ -30,6 +30,21 @@ describe('BotFlowService', () => {
     expect(keyboard?.[0]?.[0]?.text.length).toBeGreaterThan(0);
   });
 
+  it('shows club link only for active The Cycle subscription', () => {
+    const inactiveKeyboard = service.buildScreenInlineKeyboard('the-cycle', {
+      hasActiveSubscription: false,
+    });
+    const activeKeyboard = service.buildScreenInlineKeyboard('the-cycle', {
+      hasActiveSubscription: true,
+    });
+
+    expect(inactiveKeyboard?.flat().some((button) => button.url)).toBe(false);
+    expect(activeKeyboard?.[1]?.[0]).toEqual({
+      text: 'Перейти в клуб',
+      url: 'https://t.me/+idivZ5snYSo1OTUy',
+    });
+  });
+
   it('builds consultation button as manager Telegram link', () => {
     const keyboard = service.buildScreenInlineKeyboard('consultation');
 

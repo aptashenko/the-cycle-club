@@ -9,25 +9,25 @@
       "buttons": [
         [
           {
-            "text": "Клуб The Cycle\uD83C\uDF38",
+            "text": "\uD83C\uDF38 Клуб The Cycle",
             "target": "the-cycle"
           }
         ],
         [
           {
-            "text": "Материалы\uD83D\uDCDA",
+            "text": "\uD83D\uDCDA Материалы",
             "target": "materials"
           }
         ],
         [
           {
-            "text": "Запись на марафон\uD83E\uDD51",
+            "text": "\uD83E\uDD51 Запись на марафон",
             "target": "marathon"
           }
         ],
         [
           {
-            "text": "Запись на консультацию \uD83D\uDECE\uFE0F",
+            "text": "\uD83D\uDECE\uFE0F Запись на консультацию",
             "target": "consultation"
           }
         ]
@@ -48,9 +48,16 @@
         [
           {
             "text": "Присоединиться к The Cycle",
-            "activeText": "💳 Продлить доступ",
+            "activeText": "💳 Продлить подписку",
             "action": "startPayment",
             "productSlug": "the-cycle"
+          }
+        ],
+        [
+          {
+            "text": "Перейти в клуб",
+            "url": "https://t.me/+idivZ5snYSo1OTUy",
+            "visible": "activeSubscription"
           }
         ],
         [
@@ -197,13 +204,13 @@
   "replyKeyboard": {
     "message": "Основное меню доступно внизу❤\uFE0F",
     "buttons": [
-      ["🏠 На главную"],
-      ["📦 Мои подписки", "💬 Служба поддержки"]
+      ["\uD83D\uDE80 В начало"],
+      ["\uD83D\uDC8C Мои подписки", "\uD83E\uDEC2 Поддержка"]
     ]
   },
   "support": {
     "prompt": "Выберите тему обращения:",
-    "openButtonText": "💬 Служба поддержки",
+    "openButtonText": "\uD83E\uDEC2 Поддержка",
     "successMessage": "Спасибо. Мы получили ваше обращение и скоро свяжемся с вами ❤️",
     "topics": [
       {
@@ -251,6 +258,8 @@
       "",
       "Ваша подписка действует до {{date}}",
       "",
+      "Добро пожаловать! Для доступа к пространству перейдите, пожалуйста, по ссылке:\nhttps://t.me/+idivZ5snYSo1OTUy",
+      "",
       "С любовью, команда Николаевой Кристины \uD83E\uDD0D"
     ],
     "nonSubscriptionSuccessMessage": [
@@ -269,7 +278,7 @@
     "mockSuccessMessage": "✅ Тестовая оплата подтверждена. Подписка активирована."
   },
   "subscriptions": {
-    "title": "📦 <b>Мои подписки</b>",
+    "title": "\uD83D\uDC8C <b>Мои подписки</b>",
     "emptyMessage": "У вас пока нет активных подписок.",
     "activeMessage": [
       "У вас активна месячная подписка в клубе {{productTitle}}.",

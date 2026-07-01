@@ -156,18 +156,18 @@ Bot:
 Bot also shows the bottom reply keyboard:
 
 ```text
-🏠 На главную
-📦 Мои подписки
-💬 Саппорт
+🚀 В начало
+💌 Мои подписки
+🫂 Поддержка
 ```
 
 ### 2. Main Menu
 
-`🏠 На главную`
+`🚀 В начало`
 
 Shows the same welcome message with the three product buttons.
 
-`📦 Мои подписки`
+`💌 Мои подписки`
 
 Shows active subscriptions.
 
@@ -177,7 +177,7 @@ If there are no active subscriptions:
 У вас пока нет активных подписок.
 ```
 
-`💬 Саппорт`
+`🫂 Поддержка`
 
 Shows support topics:
 
@@ -267,7 +267,7 @@ When the user clicks this button:
 After this, the user can open:
 
 ```text
-📦 Мои подписки
+💌 Мои подписки
 ```
 
 and see the active subscription.

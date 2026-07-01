@@ -179,7 +179,7 @@ export class NotificationService {
               callback_data: `product:${subscription.product.slug}`,
             },
           ],
-          [{ text: '💬 Саппорт', callback_data: 'support:open' }],
+          [{ text: '🫂 Поддержка', callback_data: 'support:open' }],
         ],
       },
     );
@@ -202,7 +202,7 @@ export class NotificationService {
               callback_data: `product:${subscription.product.slug}`,
             },
           ],
-          [{ text: '💬 Саппорт', callback_data: 'support:open' }],
+          [{ text: '🫂 Поддержка', callback_data: 'support:open' }],
         ],
       },
     );

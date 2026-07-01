@@ -65,17 +65,17 @@ export class BotService {
       text,
     });
 
-    if (text === '/start' || text === '🏠 На главную') {
+    if (text === '/start' || text === '\uD83D\uDE80 В начало') {
       await this.sendStartScreen(message.chat.id, user.id);
       return;
     }
 
-    if (text === '📦 Мои подписки') {
+    if (text === '\uD83D\uDC8C Мои подписки') {
       await this.sendSubscriptions(message.chat.id, user.id);
       return;
     }
 
-    if (text === '💬 Саппорт') {
+    if (text === '🫂 Поддержка') {
       await this.sendSupportTopics(message.chat.id);
       return;
     }
