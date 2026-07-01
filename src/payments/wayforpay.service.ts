@@ -109,7 +109,7 @@ export class WayForPayService {
       '</head>',
       '<body>',
       '<main>',
-      '<div class="brand">The Cycle</div>',
+      '<div class="brand">Niсolaeva | nutrition</div>',
       '<div class="loader" aria-hidden="true"></div>',
       '<h1>Переходим к оплате</h1>',
       '<p>Сейчас откроется защищенная платежная страница WayForPay.</p>',
