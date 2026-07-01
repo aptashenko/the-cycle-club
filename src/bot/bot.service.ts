@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { existsSync } from 'fs';
+import { basename, join } from 'path';
 import { PaymentProvider, ProductType } from '../common/enums';
 import { PaymentService } from '../payments/payment.service';
 import { Product } from '../products/product.entity';
@@ -174,12 +176,57 @@ export class BotService {
       screenId,
       context,
     );
+    const replyMarkup = inlineKeyboard
+      ? { inline_keyboard: inlineKeyboard }
+      : undefined;
 
-    await this.telegram.sendMessage(
+    if (!screen.photoFile) {
+      await this.telegram.sendMessage(
+        chatId,
+        this.flow.getScreenText(screenId),
+        replyMarkup,
+      );
+      return;
+    }
+
+    await this.telegram.sendMessage(chatId, this.flow.getScreenText(screenId));
+
+    const photo = this.resolveFlowPhotoFile(screen.photoFile);
+    if (!photo) {
+      await this.telegram.sendMessage(
+        chatId,
+        'Фото не найдено. Выберите действие:',
+        replyMarkup,
+      );
+      return;
+    }
+
+    const photoResponse = await this.telegram.sendPhotoFile(
       chatId,
-      this.flow.getScreenText(screenId),
-      inlineKeyboard ? { inline_keyboard: inlineKeyboard } : undefined,
+      photo.path,
+      photo.filename,
+      replyMarkup,
     );
+
+    if (!photoResponse.ok && replyMarkup) {
+      await this.telegram.sendMessage(chatId, 'Выберите действие:', replyMarkup);
+    }
+  }
+
+  private resolveFlowPhotoFile(photoFile: string) {
+    const filename = basename(photoFile);
+
+    if (filename !== photoFile) {
+      return null;
+    }
+
+    const path = join(process.cwd(), 'files', filename);
+
+    if (!existsSync(path)) {
+      return null;
+    }
+
+    return { path, filename };
   }
 
   private async buildFlowScreenContext(screen: FlowScreen, userId: string) {

@@ -337,6 +337,13 @@ export class BotFlowService {
         );
       }
 
+      if (screen.photoFile !== undefined) {
+        parsedScreen.photoFile = this.assertString(
+          screen.photoFile,
+          `screens.${screenId}.photoFile`,
+        );
+      }
+
       if (screen.buttons !== undefined) {
         parsedScreen.buttons = this.parseButtonRows(
           screen.buttons,

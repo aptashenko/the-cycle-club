@@ -16,6 +16,7 @@ export type FlowButton = {
 export type FlowScreen = {
   text: string[];
   productSlug?: string;
+  photoFile?: string;
   buttons?: FlowButton[][];
 };
 

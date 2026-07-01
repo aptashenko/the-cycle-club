@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { readFileSync } from 'fs';
+import { extname } from 'path';
 import { TelegramUpdate } from '../bot/telegram.types';
 
 type TelegramMarkup = Record<string, unknown>;
@@ -30,6 +32,29 @@ export class TelegramApiService {
       disable_web_page_preview: true,
       reply_markup: replyMarkup,
     });
+  }
+
+  async sendPhotoFile(
+    chatId: string | number,
+    photoPath: string,
+    filename: string,
+    replyMarkup?: TelegramMarkup,
+  ) {
+    const form = new FormData();
+    form.set('chat_id', String(chatId));
+    form.set(
+      'photo',
+      new Blob([readFileSync(photoPath)], {
+        type: this.getPhotoContentType(filename),
+      }),
+      filename,
+    );
+
+    if (replyMarkup) {
+      form.set('reply_markup', JSON.stringify(replyMarkup));
+    }
+
+    return this.requestForm('sendPhoto', form);
   }
 
   async answerCallbackQuery(callbackQueryId: string, text?: string) {
@@ -75,6 +100,29 @@ export class TelegramApiService {
     return data.result ?? [];
   }
 
+  private async requestForm<T = unknown>(
+    method: string,
+    body: FormData,
+  ): Promise<TelegramResponse<T>> {
+    const response = await fetch(
+      `https://api.telegram.org/bot${this.token}/${method}`,
+      {
+        method: 'POST',
+        body,
+      },
+    );
+
+    const data = (await response.json()) as TelegramResponse<T>;
+
+    if (!response.ok || !data.ok) {
+      this.logger.error(
+        `Telegram ${method} failed: ${response.status} ${data.description ?? ''}`,
+      );
+    }
+
+    return data;
+  }
+
   private async request<T = unknown>(
     method: string,
     payload: Record<string, unknown>,
@@ -97,5 +145,23 @@ export class TelegramApiService {
     }
 
     return data;
+  }
+
+  private getPhotoContentType(filename: string): string {
+    const extension = extname(filename).toLowerCase();
+
+    if (extension === '.jpg' || extension === '.jpeg') {
+      return 'image/jpeg';
+    }
+
+    if (extension === '.png') {
+      return 'image/png';
+    }
+
+    if (extension === '.webp') {
+      return 'image/webp';
+    }
+
+    return 'application/octet-stream';
   }
 }

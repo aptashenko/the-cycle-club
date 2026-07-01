@@ -49,7 +49,7 @@ describe('BotFlowService', () => {
       },
     });
 
-    expect(keyboard?.[0]?.[0]?.text).toBe('Купить 1.00 UAH');
+    expect(keyboard?.[0]?.[0]?.text).toBe('Купить (1.00 UAH)');
   });
 
   it('resolves support topics from callbacks', () => {
