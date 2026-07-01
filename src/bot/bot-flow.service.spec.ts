@@ -58,13 +58,13 @@ describe('BotFlowService', () => {
     const keyboard = service.buildScreenInlineKeyboard('material-1', {
       productsBySlug: {
         'material-1': {
-          price: '1.00',
+          price: '1499.00',
           currency: 'UAH',
         },
       },
     });
 
-    expect(keyboard?.[0]?.[0]?.text).toBe('Купить (1.00 UAH)');
+    expect(keyboard?.[0]?.[0]?.text).toBe('Купить (1499.00 UAH)');
   });
 
   it('resolves support topics from callbacks', () => {

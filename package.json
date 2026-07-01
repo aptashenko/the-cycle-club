@@ -17,6 +17,7 @@
     "migration:run": "npm run typeorm -- migration:run",
     "migration:revert": "npm run typeorm -- migration:revert",
     "db:reset": "ts-node -r tsconfig-paths/register src/database/reset.ts",
+    "import:telegram-subscriptions": "ts-node -r tsconfig-paths/register src/database/import-telegram-subscriptions.ts",
     "import:clients": "ts-node -r tsconfig-paths/register src/database/import-clients.ts",
     "migration:show": "npm run typeorm -- migration:show"
   },

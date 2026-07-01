@@ -264,7 +264,6 @@ export class PaymentService {
     } else {
       paymentAttempt.status = PaymentAttemptStatus.Failed;
       await this.paymentAttemptRepository.save(paymentAttempt);
-      await this.notifications.notifyPaymentFailed(paymentAttempt);
       await this.activity.track(
         paymentAttempt.user,
         'payment',
@@ -307,7 +306,6 @@ export class PaymentService {
       paymentAttempt.status = PaymentAttemptStatus.Abandoned;
       paymentAttempt.abandonedAt = new Date();
       const saved = await this.paymentAttemptRepository.save(paymentAttempt);
-      await this.notifications.notifyAbandonedPayment(saved);
       abandoned.push(saved);
     }
 

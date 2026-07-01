@@ -95,60 +95,6 @@ export class NotificationService {
     );
   }
 
-  async notifyAbandonedPayment(paymentAttempt: PaymentAttempt) {
-    await this.sendAdminMessage(
-      [
-        '⚠️ <b>Оплата не завершена</b>',
-        '',
-        '<b>Пользователь:</b>',
-        this.formatUser(paymentAttempt.user),
-        '',
-        '<b>ID:</b>',
-        paymentAttempt.user.telegramId,
-        '',
-        '<b>Продукт:</b>',
-        paymentAttempt.product.title,
-        '',
-        '<b>Сумма:</b>',
-        `${paymentAttempt.amount} ${paymentAttempt.currency}`,
-      ].join('\n'),
-    );
-  }
-
-  async notifyPaymentFailed(paymentAttempt: PaymentAttempt) {
-    const payload = paymentAttempt.rawPayload ?? {};
-
-    await this.sendAdminMessage(
-      [
-        '❌ <b>Ошибка оплаты</b>',
-        '',
-        '<b>Пользователь:</b>',
-        this.formatUser(paymentAttempt.user),
-        '',
-        '<b>ID:</b>',
-        paymentAttempt.user.telegramId,
-        '',
-        '<b>Продукт:</b>',
-        paymentAttempt.product.title,
-        '',
-        '<b>Сумма:</b>',
-        `${paymentAttempt.amount} ${paymentAttempt.currency}`,
-        '',
-        '<b>Provider:</b>',
-        paymentAttempt.provider,
-        '',
-        '<b>Order:</b>',
-        paymentAttempt.providerOrderId,
-        '',
-        '<b>Status:</b>',
-        String(payload.transactionStatus ?? paymentAttempt.status),
-        '',
-        '<b>Reason code:</b>',
-        String(payload.reasonCode ?? '-'),
-      ].join('\n'),
-    );
-  }
-
   async notifySubscriptionExpiring(
     subscription: Subscription,
     daysBefore: 5 | 1,
