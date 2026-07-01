@@ -52,7 +52,7 @@ export class PaymentsController {
       '</head>',
       '<body>',
       '<main>',
-      '<div class="brand">The Cycle</div>',
+      '<div class="brand">Niсolaeva | nutrition</div>',
       '<div class="mark">✓</div>',
       '<h1>Спасибо, платеж отправлен на проверку</h1>',
       '<p>Мы подтверждаем оплату автоматически. Обычно это занимает несколько секунд.</p>',

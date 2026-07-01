@@ -73,4 +73,10 @@ describe('BotFlowService', () => {
     expect(message.length).toBeGreaterThan(0);
     expect(message).not.toContain('подписка');
   });
+
+  it('renders product title in download message', () => {
+    expect(
+      service.getDownloadMessage({ productTitle: 'Практичная методичка' }),
+    ).toContain('«Практичная методичка»');
+  });
 });
