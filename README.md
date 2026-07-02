@@ -412,8 +412,17 @@ Available admin commands:
 /user <telegram_id>
 /payments <telegram_id>
 /subscriptions <telegram_id>
+/grant_subscription
 /activity <telegram_id>
 ```
+
+`/grant_subscription` starts a two-step admin dialog:
+
+1. Send the user's Telegram username, for example `@username`.
+2. Send the subscription end date, for example `31.12.2026` or `2026-12-31`.
+
+The command grants access to the `the-cycle` subscription product until the
+given date.
 
 `/support` sends each open support request as a separate message with a
 `✅ Завершить` inline button. The same button is included in new support
