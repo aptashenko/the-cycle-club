@@ -99,6 +99,10 @@ export class BotFlowService {
     return this.config.support.prompt;
   }
 
+  getSupportMessagePrompt(): string {
+    return this.config.support.messagePrompt;
+  }
+
   getSupportOpenButtonText(): string {
     return this.config.support.openButtonText;
   }
@@ -458,12 +462,23 @@ export class BotFlowService {
             parsedTopic.requestTopic,
             `support.topics.${index}.requestTopic`,
           ),
+          requiresMessage:
+            parsedTopic.requiresMessage === undefined
+              ? undefined
+              : this.assertBoolean(
+                  parsedTopic.requiresMessage,
+                  `support.topics.${index}.requiresMessage`,
+                ),
         };
       },
     );
 
     return {
       prompt: this.assertString(support.prompt, 'support.prompt'),
+      messagePrompt: this.assertString(
+        support.messagePrompt,
+        'support.messagePrompt',
+      ),
       openButtonText: this.assertString(
         support.openButtonText,
         'support.openButtonText',
@@ -615,6 +630,14 @@ export class BotFlowService {
   private assertString(value: unknown, path: string): string {
     if (typeof value !== 'string' || value.length === 0) {
       throw new Error(`${path} must be a non-empty string`);
+    }
+
+    return value;
+  }
+
+  private assertBoolean(value: unknown, path: string): boolean {
+    if (typeof value !== 'boolean') {
+      throw new Error(`${path} must be a boolean`);
     }
 
     return value;

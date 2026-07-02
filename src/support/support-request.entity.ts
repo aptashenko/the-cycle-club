@@ -24,6 +24,9 @@ export class SupportRequest {
   @Column()
   topic: string;
 
+  @Column({ type: 'text', nullable: true })
+  message?: string;
+
   @Column({
     type: 'enum',
     enum: SupportRequestStatus,

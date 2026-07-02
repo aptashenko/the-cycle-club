@@ -73,13 +73,16 @@ export class NotificationService {
         '💬 <b>Новое обращение в поддержку</b>',
         '',
         '<b>Пользователь:</b>',
-        this.formatUser(request.user),
+        this.escape(this.formatUser(request.user)),
         '',
         '<b>ID:</b>',
-        request.user.telegramId,
+        this.escape(request.user.telegramId),
         '',
         '<b>Тема:</b>',
-        request.topic,
+        this.escape(request.topic),
+        ...(request.message
+          ? ['', '<b>Сообщение:</b>', this.escape(request.message)]
+          : []),
       ].join('\n'),
       true,
       {
@@ -239,5 +242,13 @@ export class NotificationService {
     return subscription.expiresAt.toLocaleDateString('ru-RU', {
       timeZone: 'Europe/Paris',
     });
+  }
+
+  private escape(value: string) {
+    return value
+      .replaceAll('&', '&amp;')
+      .replaceAll('"', '&quot;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;');
   }
 }

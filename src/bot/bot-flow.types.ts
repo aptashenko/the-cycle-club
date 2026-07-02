@@ -29,10 +29,12 @@ export type SupportTopicConfig = {
   id: string;
   text: string;
   requestTopic: string;
+  requiresMessage?: boolean;
 };
 
 export type SupportConfig = {
   prompt: string;
+  messagePrompt: string;
   openButtonText: string;
   successMessage: string;
   topics: SupportTopicConfig[];

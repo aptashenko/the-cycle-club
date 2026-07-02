@@ -210,6 +210,7 @@
   },
   "support": {
     "prompt": "Выберите тему обращения:",
+    "messagePrompt": "Опишите, пожалуйста, ваш вопрос одним сообщением.",
     "openButtonText": "\uD83E\uDEC2 Поддержка",
     "successMessage": "Спасибо. Мы получили ваше обращение и скоро свяжемся с вами ❤️",
     "topics": [
@@ -236,7 +237,8 @@
       {
         "id": "other",
         "text": "📝 Другое",
-        "requestTopic": "📝 Другое"
+        "requestTopic": "📝 Другое",
+        "requiresMessage": true
       }
     ]
   },

@@ -614,6 +614,9 @@ export class AdminBotService {
         `User: ${this.formatUser(request.user)}`,
         `Telegram ID: <code>${this.escape(request.user.telegramId)}</code>`,
         `Topic: ${this.escape(request.topic)}`,
+        ...(request.message
+          ? ['', '<b>Message:</b>', this.escape(request.message)]
+          : []),
       ].join('\n'),
     );
   }
@@ -646,6 +649,9 @@ export class AdminBotService {
       `ID: <code>${this.escape(request.id)}</code>`,
       `User: ${this.formatUser(request.user)}`,
       `Telegram ID: <code>${this.escape(request.user.telegramId)}</code>`,
+      ...(request.message
+        ? ['', '<b>Message:</b>', this.escape(request.message)]
+        : []),
       `Resolve: <code>/resolve_support ${this.escape(request.id)}</code>`,
     ].join('\n');
   }

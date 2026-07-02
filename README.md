@@ -195,6 +195,10 @@ After the user selects a topic:
 - the user receives confirmation;
 - the manager receives a Telegram notification with the user's Telegram link and selected topic.
 
+For `📝 Другое`, the bot first asks the user to send one message with the
+request details. That text is saved on the support request and included in the
+admin notification.
+
 ### 3. The Cycle Flow
 
 User clicks:

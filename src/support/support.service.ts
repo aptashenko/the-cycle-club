@@ -14,12 +14,17 @@ export class SupportService {
     private readonly notifications: NotificationService,
   ) {}
 
-  async create(user: User, topic: string): Promise<SupportRequest> {
+  async create(
+    user: User,
+    topic: string,
+    message?: string,
+  ): Promise<SupportRequest> {
     const request = await this.supportRequestRepository.save(
       this.supportRequestRepository.create({
         user,
         userId: user.id,
         topic,
+        message,
         status: SupportRequestStatus.Open,
       }),
     );

@@ -30,6 +30,8 @@ const LEGACY_CALLBACKS = {
 
 @Injectable()
 export class BotService {
+  private readonly pendingSupportMessages = new Map<string, string>();
+
   constructor(
     private readonly telegram: TelegramApiService,
     private readonly users: UserService,
@@ -66,17 +68,39 @@ export class BotService {
     });
 
     if (text === '/start' || text === '\uD83D\uDE80 В начало') {
+      this.pendingSupportMessages.delete(user.id);
       await this.sendStartScreen(message.chat.id, user.id);
       return;
     }
 
     if (text === '\uD83D\uDC8C Мои подписки') {
+      this.pendingSupportMessages.delete(user.id);
       await this.sendSubscriptions(message.chat.id, user.id);
       return;
     }
 
     if (text === '🫂 Поддержка') {
+      this.pendingSupportMessages.delete(user.id);
       await this.sendSupportTopics(message.chat.id);
+      return;
+    }
+
+    const pendingSupportTopic = this.pendingSupportMessages.get(user.id);
+    if (pendingSupportTopic) {
+      if (!text) {
+        await this.telegram.sendMessage(
+          message.chat.id,
+          this.flow.getSupportMessagePrompt(),
+        );
+        return;
+      }
+
+      this.pendingSupportMessages.delete(user.id);
+      await this.support.create(user, pendingSupportTopic, text);
+      await this.telegram.sendMessage(
+        message.chat.id,
+        this.flow.getSupportSuccessMessage(),
+      );
       return;
     }
 
@@ -100,32 +124,38 @@ export class BotService {
     });
 
     if (data === LEGACY_CALLBACKS.theCycle) {
+      this.pendingSupportMessages.delete(user.id);
       await this.sendFlowScreen(chatId, user.id, 'the-cycle');
       return;
     }
 
     if (data === LEGACY_CALLBACKS.marathon) {
+      this.pendingSupportMessages.delete(user.id);
       await this.sendFlowScreen(chatId, user.id, 'marathon');
       return;
     }
 
     if (data === LEGACY_CALLBACKS.materials) {
+      this.pendingSupportMessages.delete(user.id);
       await this.sendFlowScreen(chatId, user.id, 'materials');
       return;
     }
 
     if (data === LEGACY_CALLBACKS.insideTheCycle) {
+      this.pendingSupportMessages.delete(user.id);
       await this.sendFlowScreen(chatId, user.id, 'the-cycle-inside');
       return;
     }
 
     if (data === LEGACY_CALLBACKS.joinTheCycle) {
+      this.pendingSupportMessages.delete(user.id);
       await this.startProductPayment(chatId, user, 'the-cycle');
       return;
     }
 
     const flowScreenId = this.flow.getFlowScreenIdFromCallback(data);
     if (flowScreenId) {
+      this.pendingSupportMessages.delete(user.id);
       await this.sendFlowScreen(chatId, user.id, flowScreenId);
       return;
     }
@@ -133,11 +163,13 @@ export class BotService {
     const paymentProductSlug =
       this.flow.getPaymentProductSlugFromCallback(data);
     if (paymentProductSlug) {
+      this.pendingSupportMessages.delete(user.id);
       await this.startProductPayment(chatId, user, paymentProductSlug);
       return;
     }
 
     if (data.startsWith(MOCK_PAYMENT_PREFIX)) {
+      this.pendingSupportMessages.delete(user.id);
       await this.confirmMockPayment(
         chatId,
         data.slice(MOCK_PAYMENT_PREFIX.length),
@@ -146,12 +178,23 @@ export class BotService {
     }
 
     if (data === SUPPORT_OPEN_CALLBACK) {
+      this.pendingSupportMessages.delete(user.id);
       await this.sendSupportTopics(chatId);
       return;
     }
 
     const supportTopic = this.flow.getSupportTopicByCallback(data);
     if (supportTopic) {
+      if (supportTopic.requiresMessage) {
+        this.pendingSupportMessages.set(user.id, supportTopic.requestTopic);
+        await this.telegram.sendMessage(
+          chatId,
+          this.flow.getSupportMessagePrompt(),
+        );
+        return;
+      }
+
+      this.pendingSupportMessages.delete(user.id);
       await this.support.create(user, supportTopic.requestTopic);
       await this.telegram.sendMessage(
         chatId,

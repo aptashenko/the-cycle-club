@@ -73,6 +73,16 @@ describe('BotFlowService', () => {
     ).toBe('💳 Проблема с оплатой');
   });
 
+  it('marks other support topic as requiring a message', () => {
+    expect(
+      service.getSupportTopicByCallback('support:topic:other'),
+    ).toMatchObject({
+      requestTopic: '📝 Другое',
+      requiresMessage: true,
+    });
+    expect(service.getSupportMessagePrompt().length).toBeGreaterThan(0);
+  });
+
   it('renders payment success message from config', () => {
     expect(
       service.getPaymentSuccessMessage({ productTitle: 'The Cycle' }),

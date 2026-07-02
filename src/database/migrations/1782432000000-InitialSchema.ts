@@ -114,6 +114,7 @@ export class InitialSchema1782432000000 implements MigrationInterface {
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "user_id" uuid NOT NULL,
         "topic" character varying NOT NULL,
+        "message" text,
         "status" "public"."support_requests_status_enum" NOT NULL DEFAULT 'open',
         "created_at" TIMESTAMP NOT NULL DEFAULT now(),
         "resolved_at" TIMESTAMP WITH TIME ZONE,
