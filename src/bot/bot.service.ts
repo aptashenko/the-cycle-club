@@ -20,6 +20,7 @@ import {
 } from './telegram.types';
 
 const MOCK_PAYMENT_PREFIX = 'payment:mock-confirm:';
+const TELEGRAM_PHOTO_CAPTION_LIMIT = 1024;
 const LEGACY_CALLBACKS = {
   theCycle: 'product:the-cycle',
   marathon: 'product:marathon',
@@ -234,7 +235,7 @@ export class BotService {
       return;
     }
 
-    await this.telegram.sendMessage(chatId, this.flow.getScreenText(screenId));
+    const text = this.flow.getScreenText(screenId);
 
     const photos = photoFiles
       .map((photoFile) => this.resolveFlowPhotoFile(photoFile))
@@ -248,6 +249,13 @@ export class BotService {
       );
       return;
     }
+
+    if (text.length <= TELEGRAM_PHOTO_CAPTION_LIMIT) {
+      await this.sendPhotosWithCaption(chatId, photos, text, replyMarkup);
+      return;
+    }
+
+    await this.telegram.sendMessage(chatId, text);
 
     for (const [index, photo] of photos.entries()) {
       const isLastPhoto = index === photos.length - 1;
@@ -265,6 +273,43 @@ export class BotService {
           replyMarkup,
         );
       }
+    }
+  }
+
+  private async sendPhotosWithCaption(
+    chatId: string | number,
+    photos: { path: string; filename: string }[],
+    caption: string,
+    replyMarkup?: Record<string, unknown>,
+  ) {
+    if (photos.length === 1) {
+      const photoResponse = await this.telegram.sendPhotoFile(
+        chatId,
+        photos[0].path,
+        photos[0].filename,
+        replyMarkup,
+        caption,
+      );
+
+      if (!photoResponse.ok && replyMarkup) {
+        await this.telegram.sendMessage(
+          chatId,
+          'Выберите действие:',
+          replyMarkup,
+        );
+      }
+
+      return;
+    }
+
+    await this.telegram.sendPhotoMediaGroup(chatId, photos, caption);
+
+    if (replyMarkup) {
+      await this.telegram.sendMessage(
+        chatId,
+        'Выберите действие:',
+        replyMarkup,
+      );
     }
   }
 

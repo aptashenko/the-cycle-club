@@ -10,6 +10,10 @@ type TelegramResponse<T> = {
   result?: T;
   description?: string;
 };
+type TelegramPhotoFile = {
+  path: string;
+  filename: string;
+};
 
 @Injectable()
 export class TelegramApiService {
@@ -39,6 +43,7 @@ export class TelegramApiService {
     photoPath: string,
     filename: string,
     replyMarkup?: TelegramMarkup,
+    caption?: string,
   ) {
     const form = new FormData();
     form.set('chat_id', String(chatId));
@@ -50,11 +55,50 @@ export class TelegramApiService {
       filename,
     );
 
+    if (caption) {
+      form.set('caption', caption);
+      form.set('parse_mode', 'HTML');
+    }
+
     if (replyMarkup) {
       form.set('reply_markup', JSON.stringify(replyMarkup));
     }
 
     return this.requestForm('sendPhoto', form);
+  }
+
+  async sendPhotoMediaGroup(
+    chatId: string | number,
+    photos: TelegramPhotoFile[],
+    caption?: string,
+  ) {
+    const form = new FormData();
+    const media = photos.map((photo, index) => {
+      const mediaItem: Record<string, unknown> = {
+        type: 'photo',
+        media: `attach://photo${index}`,
+      };
+
+      if (index === 0 && caption) {
+        mediaItem.caption = caption;
+        mediaItem.parse_mode = 'HTML';
+      }
+
+      form.set(
+        `photo${index}`,
+        new Blob([readFileSync(photo.path)], {
+          type: this.getPhotoContentType(photo.filename),
+        }),
+        photo.filename,
+      );
+
+      return mediaItem;
+    });
+
+    form.set('chat_id', String(chatId));
+    form.set('media', JSON.stringify(media));
+
+    return this.requestForm('sendMediaGroup', form);
   }
 
   async answerCallbackQuery(callbackQueryId: string, text?: string) {
