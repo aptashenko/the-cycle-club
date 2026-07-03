@@ -250,6 +250,21 @@ export class BotService {
       return;
     }
 
+    if (photos.length > 1) {
+      await this.telegram.sendMessage(chatId, text);
+      await this.telegram.sendPhotoMediaGroup(chatId, photos);
+
+      if (replyMarkup) {
+        await this.telegram.sendMessage(
+          chatId,
+          'Выберите действие:',
+          replyMarkup,
+        );
+      }
+
+      return;
+    }
+
     if (text.length <= TELEGRAM_PHOTO_CAPTION_LIMIT) {
       await this.sendPhotosWithCaption(chatId, photos, text, replyMarkup);
       return;
