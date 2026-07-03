@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AdminBotModule } from './admin-bot/admin-bot.module';
 import { BotModule } from './bot/bot.module';
+import { MigrationBotModule } from './migration-bot/migration-bot.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PaymentsModule } from './payments/payments.module';
 import { ProductsModule } from './products/products.module';
@@ -35,6 +36,7 @@ import { FilesController } from './files/files.controller';
     SupportModule,
     BotModule,
     AdminBotModule,
+    MigrationBotModule,
     SchedulerModule,
   ],
   controllers: [FilesController],

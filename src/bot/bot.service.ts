@@ -223,7 +223,9 @@ export class BotService {
       ? { inline_keyboard: inlineKeyboard }
       : undefined;
 
-    if (!screen.photoFile) {
+    const photoFiles = this.getFlowPhotoFiles(screen);
+
+    if (photoFiles.length === 0) {
       await this.telegram.sendMessage(
         chatId,
         this.flow.getScreenText(screenId),
@@ -234,8 +236,11 @@ export class BotService {
 
     await this.telegram.sendMessage(chatId, this.flow.getScreenText(screenId));
 
-    const photo = this.resolveFlowPhotoFile(screen.photoFile);
-    if (!photo) {
+    const photos = photoFiles
+      .map((photoFile) => this.resolveFlowPhotoFile(photoFile))
+      .filter((photo) => photo !== null);
+
+    if (photos.length === 0) {
       await this.telegram.sendMessage(
         chatId,
         'Фото не найдено. Выберите действие:',
@@ -244,16 +249,29 @@ export class BotService {
       return;
     }
 
-    const photoResponse = await this.telegram.sendPhotoFile(
-      chatId,
-      photo.path,
-      photo.filename,
-      replyMarkup,
-    );
+    for (const [index, photo] of photos.entries()) {
+      const isLastPhoto = index === photos.length - 1;
+      const photoResponse = await this.telegram.sendPhotoFile(
+        chatId,
+        photo.path,
+        photo.filename,
+        isLastPhoto ? replyMarkup : undefined,
+      );
 
-    if (!photoResponse.ok && replyMarkup) {
-      await this.telegram.sendMessage(chatId, 'Выберите действие:', replyMarkup);
+      if (!photoResponse.ok && isLastPhoto && replyMarkup) {
+        await this.telegram.sendMessage(
+          chatId,
+          'Выберите действие:',
+          replyMarkup,
+        );
+      }
     }
+  }
+
+  private getFlowPhotoFiles(screen: FlowScreen): string[] {
+    return [screen.photoFile, ...(screen.photoFiles ?? [])].filter(
+      (photoFile): photoFile is string => Boolean(photoFile),
+    );
   }
 
   private resolveFlowPhotoFile(photoFile: string) {
@@ -274,9 +292,8 @@ export class BotService {
 
   private async buildFlowScreenContext(screen: FlowScreen, userId: string) {
     const productSlugs = this.getFlowScreenProductSlugs(screen);
-    const activeProductsBySlug = await this.getActiveProductsBySlug(
-      productSlugs,
-    );
+    const activeProductsBySlug =
+      await this.getActiveProductsBySlug(productSlugs);
     const productsBySlug =
       this.buildFlowScreenProductValues(activeProductsBySlug);
 

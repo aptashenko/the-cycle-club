@@ -107,6 +107,13 @@ src/bot/bot-flow.json
 
 The config controls screen text, inline buttons, reply keyboard labels, support topics, payment prompt copy, and subscription messages.
 
+Screens can send local images from the `files` directory before the inline
+buttons. Use `photoFile` for one image or `photoFiles` for several images:
+
+```json
+"photoFiles": ["inside-1.jpg", "inside-2.jpg"]
+```
+
 Supported screen button types:
 
 - `target` - opens another configured screen through `flow:<screenId>`.

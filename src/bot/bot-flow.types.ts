@@ -17,6 +17,7 @@ export type FlowScreen = {
   text: string[];
   productSlug?: string;
   photoFile?: string;
+  photoFiles?: string[];
   buttons?: FlowButton[][];
 };
 
