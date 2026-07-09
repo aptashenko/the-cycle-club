@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AttributionModule } from '../attribution/attribution.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { ProductsModule } from '../products/products.module';
@@ -20,6 +21,7 @@ import { BotService } from './bot.service';
     PaymentsModule,
     SupportModule,
     UserActivityModule,
+    AttributionModule,
   ],
   controllers: [BotController],
   providers: [BotService, BotPollingService, BotFlowService],

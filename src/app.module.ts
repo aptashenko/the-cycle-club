@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AdminBotModule } from './admin-bot/admin-bot.module';
+import { AttributionModule } from './attribution/attribution.module';
 import { BotModule } from './bot/bot.module';
 import { MigrationBotModule } from './migration-bot/migration-bot.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -34,6 +35,7 @@ import { FilesController } from './files/files.controller';
     NotificationsModule,
     PaymentsModule,
     SupportModule,
+    AttributionModule,
     BotModule,
     AdminBotModule,
     MigrationBotModule,
