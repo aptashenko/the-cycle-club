@@ -2,9 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { existsSync } from 'fs';
 import { basename, join } from 'path';
 import { PaymentProvider, ProductType } from '../common/enums';
+import { NotificationService } from '../notifications/notification.service';
 import { PaymentService } from '../payments/payment.service';
 import { Product } from '../products/product.entity';
-import { ProductService } from '../products/product.service';
+import { ProductService, THE_CYCLE_SLUG } from '../products/product.service';
 import { SubscriptionService } from '../subscriptions/subscription.service';
 import { SupportService } from '../support/support.service';
 import { UserActivityService } from '../user-activity/user-activity.service';
@@ -39,6 +40,7 @@ export class BotService {
     private readonly products: ProductService,
     private readonly subscriptions: SubscriptionService,
     private readonly payments: PaymentService,
+    private readonly notifications: NotificationService,
     private readonly support: SupportService,
     private readonly activity: UserActivityService,
     private readonly flow: BotFlowService,
@@ -357,13 +359,19 @@ export class BotService {
     const productsBySlug =
       this.buildFlowScreenProductValues(activeProductsBySlug);
 
-    if (!screen.productSlug) {
+    const accessProductSlug =
+      screen.productSlug ??
+      (productSlugs.length === 1 ? productSlugs[0] : null);
+
+    if (!accessProductSlug) {
       return { productsBySlug };
     }
 
-    const product = activeProductsBySlug[screen.productSlug];
-    const hasActiveSubscription =
-      await this.subscriptions.hasActiveSubscription(userId, product.id);
+    const product = activeProductsBySlug[accessProductSlug];
+    const hasActiveSubscription = await this.hasActiveSubscriptionForProduct(
+      userId,
+      product,
+    );
 
     return { hasActiveSubscription, productsBySlug };
   }
@@ -427,8 +435,19 @@ export class BotService {
   ) {
     const product = await this.products.getActiveProductBySlug(productSlug);
 
-    const hasActiveSubscription =
-      await this.subscriptions.hasActiveSubscription(user.id, product.id);
+    const hasActiveSubscription = await this.hasActiveSubscriptionForProduct(
+      user.id,
+      product,
+    );
+
+    if (this.canOpenProductBySubscription(product, hasActiveSubscription)) {
+      await this.notifications.notifyProductAccessBySubscription(user, product);
+      await this.activity.track(user, 'product', 'opened_by_subscription', {
+        productId: product.id,
+        productSlug: product.slug,
+      });
+      return;
+    }
 
     const paymentAttempt = await this.payments.createWayForPayAttempt(
       user,
@@ -481,6 +500,38 @@ export class BotService {
           ],
         ],
       },
+    );
+  }
+
+  private async hasActiveSubscriptionForProduct(
+    userId: string,
+    product: Product,
+  ) {
+    const subscriptionProduct =
+      product.type === ProductType.Subscription
+        ? product
+        : product.includedInSubscription
+          ? await this.products.getActiveProductBySlug(THE_CYCLE_SLUG)
+          : null;
+
+    if (!subscriptionProduct) {
+      return false;
+    }
+
+    return this.subscriptions.hasActiveSubscription(
+      userId,
+      subscriptionProduct.id,
+    );
+  }
+
+  private canOpenProductBySubscription(
+    product: Product,
+    hasActiveSubscription: boolean,
+  ) {
+    return (
+      product.type !== ProductType.Subscription &&
+      product.includedInSubscription &&
+      hasActiveSubscription
     );
   }
 

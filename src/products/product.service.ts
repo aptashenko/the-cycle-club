@@ -16,6 +16,7 @@ type ProductSeed = {
   currency: string;
   type: ProductType;
   downloadFiles: ProductDownloadFile[];
+  includedInSubscription: boolean;
   isActive: boolean;
 };
 
@@ -71,6 +72,7 @@ export class ProductService implements OnModuleInit {
     product.currency = productSeed.currency;
     product.type = productSeed.type;
     product.downloadFiles = productSeed.downloadFiles;
+    product.includedInSubscription = productSeed.includedInSubscription;
     product.isActive = productSeed.isActive;
 
     return this.productRepository.save(product);
@@ -114,6 +116,11 @@ export class ProductService implements OnModuleInit {
         values.downloadFiles,
         String(values.slug ?? 'unknown'),
       ),
+      includedInSubscription: this.parseOptionalBoolean(
+        values.includedInSubscription,
+        false,
+        'includedInSubscription',
+      ),
       isActive: values.isActive,
     };
 
@@ -136,6 +143,13 @@ export class ProductService implements OnModuleInit {
       }
 
       if (key === 'downloadFiles') {
+        continue;
+      }
+
+      if (key === 'includedInSubscription') {
+        if (typeof value !== 'boolean') {
+          throw new Error(`Invalid product seed field: ${key}`);
+        }
         continue;
       }
 
@@ -184,5 +198,21 @@ export class ProductService implements OnModuleInit {
         url: values.url,
       };
     });
+  }
+
+  private parseOptionalBoolean(
+    value: unknown,
+    defaultValue: boolean,
+    path: string,
+  ): boolean {
+    if (value === undefined) {
+      return defaultValue;
+    }
+
+    if (typeof value !== 'boolean') {
+      throw new Error(`Invalid product seed field: ${path}`);
+    }
+
+    return value;
   }
 }

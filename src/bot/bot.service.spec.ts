@@ -1,3 +1,5 @@
+import { ProductType } from '../common/enums';
+import { NotificationService } from '../notifications/notification.service';
 import { PaymentService } from '../payments/payment.service';
 import { ProductService } from '../products/product.service';
 import { SubscriptionService } from '../subscriptions/subscription.service';
@@ -29,6 +31,9 @@ describe('BotService support flow', () => {
     const activity = {
       track: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<UserActivityService>;
+    const notifications = {
+      notifyProductAccessBySubscription: jest.fn().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<NotificationService>;
     const flow = new BotFlowService();
 
     const service = new BotService(
@@ -37,12 +42,13 @@ describe('BotService support flow', () => {
       {} as ProductService,
       {} as SubscriptionService,
       {} as PaymentService,
+      notifications,
       support,
       activity,
       flow,
     );
 
-    return { service, telegram, support, flow };
+    return { service, telegram, support, activity, notifications, flow };
   };
 
   it('asks for a message after selecting other support topic', async () => {
@@ -104,13 +110,94 @@ describe('BotService support flow', () => {
       },
     });
 
-    expect(support.create).toHaveBeenCalledWith(
-      user,
-      '💳 Проблема с оплатой',
-    );
+    expect(support.create).toHaveBeenCalledWith(user, '💳 Проблема с оплатой');
     expect(telegram.sendMessage).toHaveBeenLastCalledWith(
       123456,
       flow.getSupportSuccessMessage(),
     );
+  });
+
+  it('opens included material for active The Cycle subscribers without payment', async () => {
+    const telegram = {
+      answerCallbackQuery: jest.fn().mockResolvedValue(undefined),
+      sendMessage: jest.fn().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<TelegramApiService>;
+    const users = {
+      upsertTelegramUser: jest.fn().mockResolvedValue(user),
+    } as unknown as jest.Mocked<UserService>;
+    const material = {
+      id: 'material-id',
+      slug: 'material-3',
+      title: 'Методичка по ранней седине',
+      type: ProductType.OneTime,
+      includedInSubscription: true,
+    };
+    const theCycle = {
+      id: 'the-cycle-id',
+      slug: 'the-cycle',
+      title: 'The Cycle',
+      type: ProductType.Subscription,
+      includedInSubscription: false,
+    };
+    const products = {
+      getActiveProductBySlug: jest.fn(async (slug: string) => {
+        if (slug === 'material-3') {
+          return material;
+        }
+
+        return theCycle;
+      }),
+    } as unknown as jest.Mocked<ProductService>;
+    const subscriptions = {
+      hasActiveSubscription: jest.fn().mockResolvedValue(true),
+    } as unknown as jest.Mocked<SubscriptionService>;
+    const payments = {
+      createWayForPayAttempt: jest.fn(),
+    } as unknown as jest.Mocked<PaymentService>;
+    const notifications = {
+      notifyProductAccessBySubscription: jest.fn().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<NotificationService>;
+    const support = {
+      create: jest.fn().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<SupportService>;
+    const activity = {
+      track: jest.fn().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<UserActivityService>;
+
+    const service = new BotService(
+      telegram,
+      users,
+      products,
+      subscriptions,
+      payments,
+      notifications,
+      support,
+      activity,
+      new BotFlowService(),
+    );
+
+    await service.handleUpdate({
+      update_id: 1,
+      callback_query: {
+        id: 'callback-id',
+        from: { id: 123456, first_name: 'Jane' },
+        message: {
+          message_id: 10,
+          chat: { id: 123456, type: 'private' },
+        },
+        data: 'payment:start:material-3',
+      },
+    });
+
+    expect(products.getActiveProductBySlug).toHaveBeenCalledWith('material-3');
+    expect(products.getActiveProductBySlug).toHaveBeenCalledWith('the-cycle');
+    expect(subscriptions.hasActiveSubscription).toHaveBeenCalledWith(
+      user.id,
+      'the-cycle-id',
+    );
+    expect(
+      notifications.notifyProductAccessBySubscription,
+    ).toHaveBeenCalledWith(user, material);
+    expect(payments.createWayForPayAttempt).not.toHaveBeenCalled();
   });
 });

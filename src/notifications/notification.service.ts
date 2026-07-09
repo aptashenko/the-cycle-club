@@ -4,6 +4,7 @@ import { AdminTelegramApiService } from '../admin-bot/admin-telegram-api.service
 import { BotFlowService } from '../bot/bot-flow.service';
 import { ProductType } from '../common/enums';
 import { PaymentAttempt } from '../payments/payment-attempt.entity';
+import { Product } from '../products/product.entity';
 import { Subscription } from '../subscriptions/subscription.entity';
 import { SupportRequest } from '../support/support-request.entity';
 import { User } from '../users/user.entity';
@@ -65,6 +66,10 @@ export class NotificationService {
         paymentAttempt.providerTransactionId ?? '-',
       ].join('\n'),
     );
+  }
+
+  async notifyProductAccessBySubscription(user: User, product: Product) {
+    await this.sendProductDownloadLinks(user, product);
   }
 
   async notifySupportRequest(request: SupportRequest) {
@@ -172,16 +177,23 @@ export class NotificationService {
   }
 
   private async sendDownloadLinks(paymentAttempt: PaymentAttempt) {
-    const downloadFiles = paymentAttempt.product.downloadFiles ?? [];
+    await this.sendProductDownloadLinks(
+      paymentAttempt.user,
+      paymentAttempt.product,
+    );
+  }
+
+  private async sendProductDownloadLinks(user: User, product: Product) {
+    const downloadFiles = product.downloadFiles ?? [];
 
     if (downloadFiles.length === 0) {
       return;
     }
 
     await this.telegram.sendMessage(
-      paymentAttempt.user.telegramId,
+      user.telegramId,
       this.flow.getDownloadMessage({
-        productTitle: paymentAttempt.product.title,
+        productTitle: product.title,
       }),
       {
         inline_keyboard: downloadFiles.map((file) => [

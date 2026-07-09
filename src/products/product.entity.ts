@@ -41,6 +41,9 @@ export class Product {
   @Column({ name: 'download_files', type: 'jsonb', nullable: true })
   downloadFiles?: ProductDownloadFile[] | null;
 
+  @Column({ name: 'included_in_subscription', default: false })
+  includedInSubscription: boolean;
+
   @Column({ default: true })
   isActive: boolean;
 

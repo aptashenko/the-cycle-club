@@ -67,6 +67,23 @@ describe('BotFlowService', () => {
     expect(keyboard?.[0]?.[0]?.text).toBe('Купить (1499.00 UAH)');
   });
 
+  it('uses active text for included material when subscription context is active', () => {
+    const keyboard = service.buildScreenInlineKeyboard('material-3', {
+      hasActiveSubscription: true,
+      productsBySlug: {
+        'material-3': {
+          price: '799.00',
+          currency: 'UAH',
+        },
+      },
+    });
+
+    expect(keyboard?.[0]?.[0]).toMatchObject({
+      text: 'Открыть материал',
+      callback_data: 'payment:start:material-3',
+    });
+  });
+
   it('resolves support topics from callbacks', () => {
     expect(
       service.getSupportTopicByCallback('support:topic:payment')?.requestTopic,

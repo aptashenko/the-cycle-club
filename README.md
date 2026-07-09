@@ -140,6 +140,16 @@ One-time products can include downloadable files:
 
 After successful payment for a `one_time` product, the bot sends these files as Telegram URL buttons.
 
+One-time products can also be included in the active `The Cycle` subscription:
+
+```json
+"includedInSubscription": true
+```
+
+If this flag is enabled and the user has an active `the-cycle` subscription,
+the bot sends the material download links immediately instead of starting a
+payment. Without this flag, the material is always sold as a separate purchase.
+
 ### 1. Start
 
 User sends:
