@@ -38,5 +38,20 @@
       }
     ],
     "isActive": true
+  },
+  {
+    "slug": "material-3",
+    "title": "Методичка по ранней седине",
+    "description": "Методичка о причинах ранней седины, механизмах развития, разборе исследований и комплексном подходе к нутритивной поддержке без ложных обещаний и мифов.",
+    "price": "799.00",
+    "currency": "UAH",
+    "type": "one_time",
+    "downloadFiles": [
+      {
+        "title": "Скачать методичку ✅",
+        "url": "/files/pravda_o_ranney_sedine.pdf"
+      }
+    ],
+    "isActive": true
   }
 ]
