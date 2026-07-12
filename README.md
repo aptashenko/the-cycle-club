@@ -461,10 +461,12 @@ given date.
 1. Send `/broadcast` in the admin bot.
 2. Send the broadcast text.
 3. Check the preview and recipient count.
-4. Send `/confirm_broadcast` to start sending, or `/cancel` to cancel.
+4. Tap the bottom `✅ Подтвердить рассылку` button to start sending, or
+   `❌ Отмена` to cancel.
 
 The message is sent through `TELEGRAM_BOT_TOKEN`, so users receive it from the
-main customer bot. Broadcast text is escaped and sent as plain text.
+main customer bot. Broadcast text is escaped and sent as plain text. Manual
+commands `/confirm_broadcast` and `/cancel` also work.
 
 `/support` sends each open support request as a separate message with a
 `✅ Завершить` inline button. The same button is included in new support

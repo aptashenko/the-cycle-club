@@ -22,6 +22,8 @@ const ADMIN_MENU_PREFIX = 'admin:menu:';
 const GRANT_SUBSCRIPTION_PRODUCT_SLUG = 'the-cycle';
 const BROADCAST_BATCH_SIZE = 100;
 const BROADCAST_SEND_DELAY_MS = 50;
+const BROADCAST_CONFIRM_BUTTON = '✅ Подтвердить рассылку';
+const BROADCAST_CANCEL_BUTTON = '❌ Отмена';
 
 type GrantSubscriptionSession =
   | {
@@ -166,9 +168,13 @@ export class AdminBotService {
 
     const broadcastSession = this.broadcastSessions.get(String(chatId));
     if (broadcastSession) {
-      if (command === '/cancel') {
+      if (command === '/cancel' || text === BROADCAST_CANCEL_BUTTON) {
         this.broadcastSessions.delete(String(chatId));
-        await this.telegram.sendMessage(chatId, 'Broadcast cancelled.');
+        await this.telegram.sendMessage(
+          chatId,
+          'Broadcast cancelled.',
+          this.getRemoveKeyboardMarkup(),
+        );
         return;
       }
 
@@ -732,6 +738,34 @@ export class AdminBotService {
     };
   }
 
+  private getBroadcastTextKeyboardMarkup() {
+    return {
+      keyboard: [[{ text: BROADCAST_CANCEL_BUTTON }]],
+      resize_keyboard: true,
+      one_time_keyboard: false,
+      selective: true,
+    };
+  }
+
+  private getBroadcastConfirmKeyboardMarkup() {
+    return {
+      keyboard: [
+        [{ text: BROADCAST_CONFIRM_BUTTON }],
+        [{ text: BROADCAST_CANCEL_BUTTON }],
+      ],
+      resize_keyboard: true,
+      one_time_keyboard: false,
+      selective: true,
+    };
+  }
+
+  private getRemoveKeyboardMarkup() {
+    return {
+      remove_keyboard: true,
+      selective: true,
+    };
+  }
+
   private async startBroadcast(chatId: string | number) {
     if (this.broadcastInProgress) {
       await this.telegram.sendMessage(
@@ -750,8 +784,9 @@ export class AdminBotService {
         '',
         'Send the text message for all users.',
         'The text will be sent as plain text from the main bot.',
-        'Use /cancel to cancel.',
+        `Use ${BROADCAST_CANCEL_BUTTON} or /cancel to cancel.`,
       ].join('\n'),
+      this.getBroadcastTextKeyboardMarkup(),
     );
   }
 
@@ -765,7 +800,8 @@ export class AdminBotService {
       if (!text || text.startsWith('/')) {
         await this.telegram.sendMessage(
           chatId,
-          'Send a non-empty broadcast text or /cancel.',
+          'Send a non-empty broadcast text or cancel the broadcast.',
+          this.getBroadcastTextKeyboardMarkup(),
         );
         return;
       }
@@ -773,7 +809,11 @@ export class AdminBotService {
       const recipientsCount = await this.users.count();
       if (recipientsCount === 0) {
         this.broadcastSessions.delete(String(chatId));
-        await this.telegram.sendMessage(chatId, 'No users to broadcast to.');
+        await this.telegram.sendMessage(
+          chatId,
+          'No users to broadcast to.',
+          this.getRemoveKeyboardMarkup(),
+        );
         return;
       }
 
@@ -792,16 +832,21 @@ export class AdminBotService {
           '',
           `Recipients: ${recipientsCount}`,
           '',
-          'Send /confirm_broadcast to start or /cancel to cancel.',
+          `Tap ${BROADCAST_CONFIRM_BUTTON} to start or ${BROADCAST_CANCEL_BUTTON} to cancel.`,
         ].join('\n'),
+        this.getBroadcastConfirmKeyboardMarkup(),
       );
       return;
     }
 
-    if (command !== '/confirm_broadcast') {
+    if (
+      command !== '/confirm_broadcast' &&
+      text !== BROADCAST_CONFIRM_BUTTON
+    ) {
       await this.telegram.sendMessage(
         chatId,
-        'Send /confirm_broadcast to start or /cancel to cancel.',
+        'Confirm or cancel the broadcast with the buttons below.',
+        this.getBroadcastConfirmKeyboardMarkup(),
       );
       return;
     }
@@ -811,6 +856,7 @@ export class AdminBotService {
       await this.telegram.sendMessage(
         chatId,
         'Another broadcast is already running. Try again later.',
+        this.getRemoveKeyboardMarkup(),
       );
       return;
     }
@@ -821,12 +867,14 @@ export class AdminBotService {
     await this.telegram.sendMessage(
       chatId,
       `Broadcast started for ${session.recipientsCount} users.`,
+      this.getRemoveKeyboardMarkup(),
     );
 
     void this.runBroadcast(chatId, session.text).catch(async (error: unknown) => {
       await this.telegram.sendMessage(
         chatId,
         `Broadcast failed: ${this.escape(error instanceof Error ? error.message : String(error))}`,
+        this.getRemoveKeyboardMarkup(),
       );
     });
   }
