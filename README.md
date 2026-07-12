@@ -52,6 +52,7 @@ Minimal local `.env`:
 
 ```env
 TELEGRAM_BOT_TOKEN=your_bot_token
+TELEGRAM_BOT_USERNAME=your_bot_username_without_at
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/the_cycle_club
 DATABASE_MIGRATIONS_RUN=true
 TELEGRAM_BOT_MODE=polling
@@ -62,6 +63,10 @@ ADMIN_TELEGRAM_ID=your_telegram_id
 MANAGER_TELEGRAM_ID=your_telegram_id
 PORT=3000
 ```
+
+`TELEGRAM_BOT_USERNAME` must match the bot from `TELEGRAM_BOT_TOKEN`.
+It is used for Telegram attribution links such as
+`/telegram/redirect?utm_source=google&utm_campaign=local_test`.
 
 WayForPay variables can stay empty in `PAYMENT_MODE=mock`:
 

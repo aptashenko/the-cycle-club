@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { existsSync } from 'fs';
 import { basename, join } from 'path';
+import { AttributionService } from '../attribution/attribution.service';
 import { PaymentProvider, ProductType } from '../common/enums';
 import { NotificationService } from '../notifications/notification.service';
 import { PaymentService } from '../payments/payment.service';
@@ -43,6 +44,7 @@ export class BotService {
     private readonly notifications: NotificationService,
     private readonly support: SupportService,
     private readonly activity: UserActivityService,
+    private readonly attribution: AttributionService,
     private readonly flow: BotFlowService,
   ) {}
 
@@ -64,13 +66,19 @@ export class BotService {
 
     const user = await this.users.upsertTelegramUser(message.from);
     const text = message.text.trim();
+    const isStartCommand = this.isStartCommand(text);
+    const startPayload = this.extractStartPayload(text);
     await this.activity.track(user, 'message', 'message_received', {
       chatId: message.chat.id,
       messageId: message.message_id,
       text,
     });
 
-    if (text === '/start' || text === '\uD83D\uDE80 В начало') {
+    if (isStartCommand || text === '\uD83D\uDE80 В начало') {
+      if (startPayload) {
+        await this.attribution.attachTelegramUser(startPayload, user);
+      }
+
       this.pendingSupportMessages.delete(user.id);
       await this.sendStartScreen(message.chat.id, user.id);
       return;
@@ -108,6 +116,15 @@ export class BotService {
     }
 
     await this.sendStartScreen(message.chat.id, user.id);
+  }
+
+  private isStartCommand(text: string): boolean {
+    return /^\/start(?:@\w+)?(?:\s|$)/.test(text);
+  }
+
+  private extractStartPayload(text: string): string | undefined {
+    const match = text.match(/^\/start(?:@\w+)?\s+([A-Za-z0-9_-]{1,64})$/);
+    return match?.[1];
   }
 
   private async handleCallback(callbackQuery: TelegramCallbackQuery) {

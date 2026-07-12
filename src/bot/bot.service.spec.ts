@@ -1,4 +1,5 @@
 import { ProductType } from '../common/enums';
+import { AttributionService } from '../attribution/attribution.service';
 import { NotificationService } from '../notifications/notification.service';
 import { PaymentService } from '../payments/payment.service';
 import { ProductService } from '../products/product.service';
@@ -21,6 +22,8 @@ describe('BotService support flow', () => {
     const telegram = {
       answerCallbackQuery: jest.fn().mockResolvedValue(undefined),
       sendMessage: jest.fn().mockResolvedValue(undefined),
+      sendPhotoFile: jest.fn().mockResolvedValue({ ok: true }),
+      sendPhotoMediaGroup: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<TelegramApiService>;
     const users = {
       upsertTelegramUser: jest.fn().mockResolvedValue(user),
@@ -31,6 +34,9 @@ describe('BotService support flow', () => {
     const activity = {
       track: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<UserActivityService>;
+    const attribution = {
+      attachTelegramUser: jest.fn().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<AttributionService>;
     const notifications = {
       notifyProductAccessBySubscription: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<NotificationService>;
@@ -45,11 +51,39 @@ describe('BotService support flow', () => {
       notifications,
       support,
       activity,
+      attribution,
       flow,
     );
 
-    return { service, telegram, support, activity, notifications, flow };
+    return {
+      service,
+      telegram,
+      support,
+      activity,
+      notifications,
+      attribution,
+      flow,
+    };
   };
+
+  it('attaches telegram attribution from start payload', async () => {
+    const { service, attribution } = buildService();
+
+    await service.handleUpdate({
+      update_id: 1,
+      message: {
+        message_id: 11,
+        from: { id: 123456, first_name: 'Jane' },
+        chat: { id: 123456, type: 'private' },
+        text: '/start abc123_X-y',
+      },
+    });
+
+    expect(attribution.attachTelegramUser).toHaveBeenCalledWith(
+      'abc123_X-y',
+      user,
+    );
+  });
 
   it('asks for a message after selecting other support topic', async () => {
     const { service, telegram, support, flow } = buildService();
@@ -121,6 +155,8 @@ describe('BotService support flow', () => {
     const telegram = {
       answerCallbackQuery: jest.fn().mockResolvedValue(undefined),
       sendMessage: jest.fn().mockResolvedValue(undefined),
+      sendPhotoFile: jest.fn().mockResolvedValue({ ok: true }),
+      sendPhotoMediaGroup: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<TelegramApiService>;
     const users = {
       upsertTelegramUser: jest.fn().mockResolvedValue(user),
@@ -163,6 +199,9 @@ describe('BotService support flow', () => {
     const activity = {
       track: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<UserActivityService>;
+    const attribution = {
+      attachTelegramUser: jest.fn().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<AttributionService>;
 
     const service = new BotService(
       telegram,
@@ -173,6 +212,7 @@ describe('BotService support flow', () => {
       notifications,
       support,
       activity,
+      attribution,
       new BotFlowService(),
     );
 
