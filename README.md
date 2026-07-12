@@ -432,6 +432,7 @@ curl "https://api.telegram.org/bot<ADMIN_TELEGRAM_BOT_TOKEN>/setWebhook?url=<APP
 Available admin commands:
 
 ```text
+/menu
 /stats
 /support
 /resolve_support <request_id>
@@ -439,8 +440,13 @@ Available admin commands:
 /payments <telegram_id>
 /subscriptions <telegram_id>
 /grant_subscription
+/broadcast
 /activity <telegram_id>
 ```
+
+`/start`, `/help`, and `/menu` show an inline button menu for the admin
+commands. Buttons run commands that do not need parameters and show examples for
+commands that require a Telegram ID.
 
 `/grant_subscription` starts a two-step admin dialog:
 
@@ -449,6 +455,16 @@ Available admin commands:
 
 The command grants access to the `the-cycle` subscription product until the
 given date.
+
+`/broadcast` starts a text broadcast from the main bot:
+
+1. Send `/broadcast` in the admin bot.
+2. Send the broadcast text.
+3. Check the preview and recipient count.
+4. Send `/confirm_broadcast` to start sending, or `/cancel` to cancel.
+
+The message is sent through `TELEGRAM_BOT_TOKEN`, so users receive it from the
+main customer bot. Broadcast text is escaped and sent as plain text.
 
 `/support` sends each open support request as a separate message with a
 `✅ Завершить` inline button. The same button is included in new support
@@ -541,6 +557,27 @@ Deploy with migrations:
 
 ```bash
 npm run deploy
+```
+
+Deploy on a remote server over SSH:
+
+```bash
+./scripts/deploy-remote.sh host
+```
+
+or:
+
+```bash
+npm run deploy:remote -- host
+```
+
+If only `host` is provided, the script connects as `root@host`. You can still
+pass another SSH user explicitly, for example `deploy@host`.
+
+The remote script runs:
+
+```bash
+cd ~/the-cycle-club && git pull && npm run deploy
 ```
 
 ## Notes

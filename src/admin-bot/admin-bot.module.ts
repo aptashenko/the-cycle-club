@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { PaymentAttempt } from '../payments/payment-attempt.entity';
 import { Product } from '../products/product.entity';
+import { TelegramApiService } from '../notifications/telegram-api.service';
 import { Subscription } from '../subscriptions/subscription.entity';
 import { SupportRequest } from '../support/support-request.entity';
 import { UserActivityEvent } from '../user-activity/user-activity-event.entity';
@@ -22,6 +23,6 @@ import { AdminTelegramApiService } from './admin-telegram-api.service';
     ]),
   ],
   controllers: [AdminBotController],
-  providers: [AdminBotService, AdminTelegramApiService],
+  providers: [AdminBotService, AdminTelegramApiService, TelegramApiService],
 })
 export class AdminBotModule {}

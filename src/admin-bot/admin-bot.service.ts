@@ -10,6 +10,7 @@ import {
 } from '../common/enums';
 import { PaymentAttempt } from '../payments/payment-attempt.entity';
 import { Product } from '../products/product.entity';
+import { TelegramApiService } from '../notifications/telegram-api.service';
 import { Subscription } from '../subscriptions/subscription.entity';
 import { SupportRequest } from '../support/support-request.entity';
 import { UserActivityEvent } from '../user-activity/user-activity-event.entity';
@@ -17,7 +18,10 @@ import { User } from '../users/user.entity';
 import { AdminTelegramApiService } from './admin-telegram-api.service';
 
 const RESOLVE_SUPPORT_PREFIX = 'support:resolve:';
+const ADMIN_MENU_PREFIX = 'admin:menu:';
 const GRANT_SUBSCRIPTION_PRODUCT_SLUG = 'the-cycle';
+const BROADCAST_BATCH_SIZE = 100;
+const BROADCAST_SEND_DELAY_MS = 50;
 
 type GrantSubscriptionSession =
   | {
@@ -28,6 +32,16 @@ type GrantSubscriptionSession =
       username: string;
     };
 
+type BroadcastSession =
+  | {
+      step: 'message';
+    }
+  | {
+      step: 'confirm';
+      text: string;
+      recipientsCount: number;
+    };
+
 @Injectable()
 export class AdminBotService {
   private readonly adminIds: Set<string>;
@@ -35,9 +49,12 @@ export class AdminBotService {
     string,
     GrantSubscriptionSession
   >();
+  private readonly broadcastSessions = new Map<string, BroadcastSession>();
+  private broadcastInProgress = false;
 
   constructor(
     private readonly telegram: AdminTelegramApiService,
+    private readonly mainTelegram: TelegramApiService,
     private readonly config: ConfigService,
     @InjectRepository(User)
     private readonly users: Repository<User>,
@@ -115,6 +132,15 @@ export class AdminBotService {
       return;
     }
 
+    if (data.startsWith(ADMIN_MENU_PREFIX)) {
+      await this.telegram.answerCallbackQuery(callbackQuery.id);
+      await this.handleMenuAction(
+        chatId,
+        data.slice(ADMIN_MENU_PREFIX.length),
+      );
+      return;
+    }
+
     await this.telegram.answerCallbackQuery(callbackQuery.id);
   }
 
@@ -138,7 +164,19 @@ export class AdminBotService {
       return;
     }
 
-    if (command === '/start' || command === '/help') {
+    const broadcastSession = this.broadcastSessions.get(String(chatId));
+    if (broadcastSession) {
+      if (command === '/cancel') {
+        this.broadcastSessions.delete(String(chatId));
+        await this.telegram.sendMessage(chatId, 'Broadcast cancelled.');
+        return;
+      }
+
+      await this.handleBroadcastStep(chatId, text, command, broadcastSession);
+      return;
+    }
+
+    if (command === '/start' || command === '/help' || command === '/menu') {
       await this.sendHelp(chatId);
       return;
     }
@@ -178,12 +216,21 @@ export class AdminBotService {
       return;
     }
 
+    if (command === '/broadcast') {
+      await this.startBroadcast(chatId);
+      return;
+    }
+
     if (command === '/activity') {
       await this.sendActivity(chatId, args[0]);
       return;
     }
 
-    await this.telegram.sendMessage(chatId, 'Unknown command. Use /help.');
+    await this.telegram.sendMessage(
+      chatId,
+      'Unknown command. Use /help or /menu.',
+      this.getAdminMenuMarkup(),
+    );
   }
 
   private isAdmin(telegramId: number) {
@@ -196,6 +243,8 @@ export class AdminBotService {
       [
         '<b>The Cycle Admin</b>',
         '',
+        'Use buttons below or send a command manually.',
+        '',
         '/stats - summary',
         '/support - open support requests',
         '/resolve_support &lt;request_id&gt; - mark support request resolved',
@@ -203,9 +252,98 @@ export class AdminBotService {
         '/payments &lt;telegram_id&gt; - latest payments',
         '/subscriptions &lt;telegram_id&gt; - user subscriptions',
         '/grant_subscription - grant The Cycle subscription by username',
+        '/broadcast - send a text broadcast from the main bot',
         '/activity &lt;telegram_id&gt; - user path',
         '/cancel - cancel current dialog',
       ].join('\n'),
+      this.getAdminMenuMarkup(),
+    );
+  }
+
+  private async handleMenuAction(chatId: string | number, action: string) {
+    if (action === 'menu') {
+      await this.sendHelp(chatId);
+      return;
+    }
+
+    if (action === 'stats') {
+      await this.sendStats(chatId);
+      return;
+    }
+
+    if (action === 'support') {
+      await this.sendSupport(chatId);
+      return;
+    }
+
+    if (action === 'grant_subscription') {
+      await this.startGrantSubscription(chatId);
+      return;
+    }
+
+    if (action === 'broadcast') {
+      await this.startBroadcast(chatId);
+      return;
+    }
+
+    if (action === 'user') {
+      await this.sendCommandHint(
+        chatId,
+        'User profile',
+        '/user &lt;telegram_id&gt;',
+        '/user 123456789',
+      );
+      return;
+    }
+
+    if (action === 'payments') {
+      await this.sendCommandHint(
+        chatId,
+        'Latest payments',
+        '/payments &lt;telegram_id&gt;',
+        '/payments 123456789',
+      );
+      return;
+    }
+
+    if (action === 'subscriptions') {
+      await this.sendCommandHint(
+        chatId,
+        'User subscriptions',
+        '/subscriptions &lt;telegram_id&gt;',
+        '/subscriptions 123456789',
+      );
+      return;
+    }
+
+    if (action === 'activity') {
+      await this.sendCommandHint(
+        chatId,
+        'User activity',
+        '/activity &lt;telegram_id&gt;',
+        '/activity 123456789',
+      );
+      return;
+    }
+
+    await this.sendHelp(chatId);
+  }
+
+  private async sendCommandHint(
+    chatId: string | number,
+    title: string,
+    usage: string,
+    example: string,
+  ) {
+    await this.telegram.sendMessage(
+      chatId,
+      [
+        `<b>${this.escape(title)}</b>`,
+        '',
+        `Usage: <code>${usage}</code>`,
+        `Example: <code>${example}</code>`,
+      ].join('\n'),
+      this.getAdminMenuMarkup(),
     );
   }
 
@@ -541,6 +679,216 @@ export class AdminBotService {
     return saved;
   }
 
+  private getAdminMenuMarkup() {
+    return {
+      inline_keyboard: [
+        [
+          {
+            text: '📊 Статистика',
+            callback_data: `${ADMIN_MENU_PREFIX}stats`,
+          },
+          {
+            text: '💬 Поддержка',
+            callback_data: `${ADMIN_MENU_PREFIX}support`,
+          },
+        ],
+        [
+          {
+            text: '👤 Пользователь',
+            callback_data: `${ADMIN_MENU_PREFIX}user`,
+          },
+          {
+            text: '💳 Платежи',
+            callback_data: `${ADMIN_MENU_PREFIX}payments`,
+          },
+        ],
+        [
+          {
+            text: '🎟 Подписки',
+            callback_data: `${ADMIN_MENU_PREFIX}subscriptions`,
+          },
+          {
+            text: '🧭 Активность',
+            callback_data: `${ADMIN_MENU_PREFIX}activity`,
+          },
+        ],
+        [
+          {
+            text: '➕ Выдать подписку',
+            callback_data: `${ADMIN_MENU_PREFIX}grant_subscription`,
+          },
+          {
+            text: '📣 Рассылка',
+            callback_data: `${ADMIN_MENU_PREFIX}broadcast`,
+          },
+        ],
+        [
+          {
+            text: '☰ Меню',
+            callback_data: `${ADMIN_MENU_PREFIX}menu`,
+          },
+        ],
+      ],
+    };
+  }
+
+  private async startBroadcast(chatId: string | number) {
+    if (this.broadcastInProgress) {
+      await this.telegram.sendMessage(
+        chatId,
+        'Another broadcast is already running. Try again later.',
+      );
+      return;
+    }
+
+    this.broadcastSessions.set(String(chatId), { step: 'message' });
+
+    await this.telegram.sendMessage(
+      chatId,
+      [
+        '<b>Broadcast from main bot</b>',
+        '',
+        'Send the text message for all users.',
+        'The text will be sent as plain text from the main bot.',
+        'Use /cancel to cancel.',
+      ].join('\n'),
+    );
+  }
+
+  private async handleBroadcastStep(
+    chatId: string | number,
+    text: string,
+    command: string,
+    session: BroadcastSession,
+  ) {
+    if (session.step === 'message') {
+      if (!text || text.startsWith('/')) {
+        await this.telegram.sendMessage(
+          chatId,
+          'Send a non-empty broadcast text or /cancel.',
+        );
+        return;
+      }
+
+      const recipientsCount = await this.users.count();
+      if (recipientsCount === 0) {
+        this.broadcastSessions.delete(String(chatId));
+        await this.telegram.sendMessage(chatId, 'No users to broadcast to.');
+        return;
+      }
+
+      this.broadcastSessions.set(String(chatId), {
+        step: 'confirm',
+        text,
+        recipientsCount,
+      });
+
+      await this.telegram.sendMessage(
+        chatId,
+        [
+          '<b>Broadcast preview</b>',
+          '',
+          this.escape(text),
+          '',
+          `Recipients: ${recipientsCount}`,
+          '',
+          'Send /confirm_broadcast to start or /cancel to cancel.',
+        ].join('\n'),
+      );
+      return;
+    }
+
+    if (command !== '/confirm_broadcast') {
+      await this.telegram.sendMessage(
+        chatId,
+        'Send /confirm_broadcast to start or /cancel to cancel.',
+      );
+      return;
+    }
+
+    if (this.broadcastInProgress) {
+      this.broadcastSessions.delete(String(chatId));
+      await this.telegram.sendMessage(
+        chatId,
+        'Another broadcast is already running. Try again later.',
+      );
+      return;
+    }
+
+    this.broadcastSessions.delete(String(chatId));
+    this.broadcastInProgress = true;
+
+    await this.telegram.sendMessage(
+      chatId,
+      `Broadcast started for ${session.recipientsCount} users.`,
+    );
+
+    void this.runBroadcast(chatId, session.text).catch(async (error: unknown) => {
+      await this.telegram.sendMessage(
+        chatId,
+        `Broadcast failed: ${this.escape(error instanceof Error ? error.message : String(error))}`,
+      );
+    });
+  }
+
+  private async runBroadcast(chatId: string | number, text: string) {
+    let sent = 0;
+    let failed = 0;
+    let skipped = 0;
+    let offset = 0;
+    const escapedText = this.escape(text);
+
+    try {
+      while (true) {
+        const users = await this.users.find({
+          select: { telegramId: true },
+          order: { createdAt: 'ASC' },
+          skip: offset,
+          take: BROADCAST_BATCH_SIZE,
+        });
+
+        if (users.length === 0) {
+          break;
+        }
+
+        for (const user of users) {
+          if (!user.telegramId) {
+            skipped += 1;
+            continue;
+          }
+
+          const response = (await this.mainTelegram.sendMessage(
+            user.telegramId,
+            escapedText,
+          )) as { ok: boolean };
+
+          if (response.ok) {
+            sent += 1;
+          } else {
+            failed += 1;
+          }
+
+          await this.sleep(BROADCAST_SEND_DELAY_MS);
+        }
+
+        offset += users.length;
+      }
+
+      await this.telegram.sendMessage(
+        chatId,
+        [
+          '✅ <b>Broadcast finished</b>',
+          '',
+          `Sent: ${sent}`,
+          `Failed: ${failed}`,
+          `Skipped: ${skipped}`,
+        ].join('\n'),
+      );
+    } finally {
+      this.broadcastInProgress = false;
+    }
+  }
+
   private async sendSupport(chatId: string | number) {
     const requests = await this.supportRequests.find({
       where: { status: SupportRequestStatus.Open },
@@ -817,5 +1165,9 @@ export class AdminBotService {
       .replaceAll('"', '&quot;')
       .replaceAll('<', '&lt;')
       .replaceAll('>', '&gt;');
+  }
+
+  private sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
