@@ -562,17 +562,19 @@ npm run deploy
 Deploy on a remote server over SSH:
 
 ```bash
-./scripts/deploy-remote.sh host
+./scripts/deploy.sh
 ```
 
 or:
 
 ```bash
-npm run deploy:remote -- host
+npm run deploy:remote
 ```
 
-If only `host` is provided, the script connects as `root@host`. You can still
-pass another SSH user explicitly, for example `deploy@host`.
+By default, the script connects to `root@188.245.207.186`. You can still pass
+another host explicitly; if only `host` is provided, the script connects as
+`root@host`. You can also pass another SSH user explicitly, for example
+`deploy@host`.
 
 The remote script runs:
 

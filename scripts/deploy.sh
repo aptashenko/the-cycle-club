@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REMOTE_TARGET="${1:-}"
+DEFAULT_REMOTE_TARGET="root@188.245.207.186"
+REMOTE_TARGET="${1:-$DEFAULT_REMOTE_TARGET}"
 
 if [[ -z "$REMOTE_TARGET" ]]; then
   echo "Usage: $0 <host|user@host>"

@@ -8,7 +8,7 @@
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
     "deploy": "npm run build && npm run migration:run && (pm2 restart the-cycle-club || pm2 start dist/main.js --name the-cycle-club)",
-    "deploy:remote": "./scripts/deploy-remote.sh",
+    "deploy:remote": "./scripts/deploy.sh",
     "lint": "eslint \"src/**/*.ts\" --fix",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "test": "jest",
