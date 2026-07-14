@@ -41,7 +41,7 @@ describe('BotFlowService', () => {
     expect(inactiveKeyboard?.flat().some((button) => button.url)).toBe(false);
     expect(activeKeyboard?.[1]?.[0]).toEqual({
       text: 'Перейти в клуб',
-      url: 'https://t.me/+idivZ5snYSo1OTUy',
+      url: 'https://telegram.me/+idivZ5snYSo1OTUy',
     });
   });
 
@@ -50,7 +50,7 @@ describe('BotFlowService', () => {
 
     expect(keyboard?.[0]?.[0]).toEqual({
       text: 'Связаться с ассистентом',
-      url: 'https://t.me/assistant_nicolaeva',
+      url: 'https://telegram.me/assistant_nicolaeva',
     });
   });
 

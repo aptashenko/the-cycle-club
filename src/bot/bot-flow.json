@@ -56,7 +56,7 @@
         [
           {
             "text": "Перейти в клуб",
-            "url": "https://t.me/+idivZ5snYSo1OTUy",
+            "url": "https://telegram.me/+idivZ5snYSo1OTUy",
             "visible": "activeSubscription"
           }
         ],
@@ -202,7 +202,7 @@
         [
           {
             "text": "Связаться с ассистентом",
-            "url": "https://t.me/assistant_nicolaeva"
+            "url": "https://telegram.me/assistant_nicolaeva"
           }
         ]
       ]
@@ -283,7 +283,7 @@
       "",
       "Ваша подписка действует до {{date}}",
       "",
-      "Добро пожаловать! Для доступа к пространству перейдите, пожалуйста, по ссылке:\nhttps://t.me/+idivZ5snYSo1OTUy",
+      "Добро пожаловать! Для доступа к пространству перейдите, пожалуйста, по ссылке:\nhttps://telegram.me/+idivZ5snYSo1OTUy",
       "",
       "С любовью, команда Николаевой Кристины \uD83E\uDD0D"
     ],

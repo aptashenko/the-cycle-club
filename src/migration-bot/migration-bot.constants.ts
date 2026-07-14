@@ -8,7 +8,7 @@ export const MIGRATION_BOT_MESSAGE = [
   '',
   'Пожалуйста, перейдите по ссылке и нажмите Start. ',
   '',
-  'Вот бот: https://t.me/nicolaeva_club_bot',
+  'Вот бот: https://telegram.me/nicolaeva_club_bot',
   '',
   '',
   '*Старый чат-бот удалите, он больше работать не будет🙏🏻',

@@ -43,7 +43,7 @@ export class AttributionController {
     const botUsername = this.config
       .get<string>('TELEGRAM_BOT_USERNAME', 'nicolaeva_club_bot')
       .replace(/^@/, '');
-    const telegramUrl = `https://t.me/${encodeURIComponent(
+    const telegramUrl = `https://telegram.me/${encodeURIComponent(
       botUsername,
     )}?start=${encodeURIComponent(attributionId)}`;
 
