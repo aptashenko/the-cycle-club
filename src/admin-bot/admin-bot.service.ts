@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Like, Repository } from 'typeorm';
 import { TelegramMessage, TelegramUpdate } from '../bot/telegram.types';
 import {
   PaymentAttemptStatus,
@@ -20,6 +20,8 @@ import { AdminTelegramApiService } from './admin-telegram-api.service';
 const RESOLVE_SUPPORT_PREFIX = 'support:resolve:';
 const ADMIN_MENU_PREFIX = 'admin:menu:';
 const GRANT_SUBSCRIPTION_PRODUCT_SLUG = 'the-cycle';
+const MARATHON_PRODUCT_SLUG_PREFIX = 'marathon-';
+const MARATHON_FLOW_ACTION_PREFIX = 'marathon:';
 const BROADCAST_BATCH_SIZE = 100;
 const BROADCAST_SEND_DELAY_MS = 50;
 const BROADCAST_CONFIRM_BUTTON = '✅ Подтвердить рассылку';
@@ -136,10 +138,7 @@ export class AdminBotService {
 
     if (data.startsWith(ADMIN_MENU_PREFIX)) {
       await this.telegram.answerCallbackQuery(callbackQuery.id);
-      await this.handleMenuAction(
-        chatId,
-        data.slice(ADMIN_MENU_PREFIX.length),
-      );
+      await this.handleMenuAction(chatId, data.slice(ADMIN_MENU_PREFIX.length));
       return;
     }
 
@@ -194,6 +193,11 @@ export class AdminBotService {
 
     if (command === '/support') {
       await this.sendSupport(chatId);
+      return;
+    }
+
+    if (command === '/marathons') {
+      await this.sendMarathonFlows(chatId);
       return;
     }
 
@@ -253,6 +257,7 @@ export class AdminBotService {
         '',
         '/stats - summary',
         '/support - open support requests',
+        '/marathons - marathon flow payments',
         '/resolve_support &lt;request_id&gt; - mark support request resolved',
         '/user &lt;telegram_id&gt; - user profile',
         '/payments &lt;telegram_id&gt; - latest payments',
@@ -279,6 +284,19 @@ export class AdminBotService {
 
     if (action === 'support') {
       await this.sendSupport(chatId);
+      return;
+    }
+
+    if (action === 'marathons') {
+      await this.sendMarathonFlows(chatId);
+      return;
+    }
+
+    if (action.startsWith(MARATHON_FLOW_ACTION_PREFIX)) {
+      await this.sendMarathonPayments(
+        chatId,
+        action.slice(MARATHON_FLOW_ACTION_PREFIX.length),
+      );
       return;
     }
 
@@ -386,6 +404,123 @@ export class AdminBotService {
         `Payments failed: ${failedPayments}`,
         `Open support: ${openSupport}`,
       ].join('\n'),
+    );
+  }
+
+  private async sendMarathonFlows(chatId: string | number) {
+    const products = await this.products.find({
+      where: { slug: Like(`${MARATHON_PRODUCT_SLUG_PREFIX}%`) },
+      order: { createdAt: 'ASC' },
+    });
+
+    if (products.length === 0) {
+      await this.telegram.sendMessage(chatId, 'No marathon flows found.');
+      return;
+    }
+
+    const sortedProducts = [...products].sort((a, b) => {
+      const flowNumberDiff =
+        this.getMarathonFlowNumber(a) - this.getMarathonFlowNumber(b);
+
+      return flowNumberDiff || a.slug.localeCompare(b.slug);
+    });
+
+    await this.telegram.sendMessage(
+      chatId,
+      '<b>Марафоны</b>\n\nВыберите поток:',
+      {
+        inline_keyboard: [
+          ...sortedProducts.map((product) => [
+            {
+              text: this.getMarathonFlowButtonText(product),
+              callback_data: `${ADMIN_MENU_PREFIX}${MARATHON_FLOW_ACTION_PREFIX}${product.slug}`,
+            },
+          ]),
+          [
+            {
+              text: '☰ Меню',
+              callback_data: `${ADMIN_MENU_PREFIX}menu`,
+            },
+          ],
+        ],
+      },
+    );
+  }
+
+  private async sendMarathonPayments(
+    chatId: string | number,
+    productSlug: string,
+  ) {
+    if (!productSlug.startsWith(MARATHON_PRODUCT_SLUG_PREFIX)) {
+      await this.telegram.sendMessage(chatId, 'Unknown marathon flow.');
+      return;
+    }
+
+    const product = await this.products.findOne({
+      where: { slug: productSlug },
+    });
+
+    if (!product) {
+      await this.telegram.sendMessage(chatId, 'Marathon flow not found.');
+      return;
+    }
+
+    const summary = await this.payments
+      .createQueryBuilder('payment')
+      .select('COUNT(payment.id)', 'count')
+      .addSelect('COALESCE(SUM(payment.amount), 0)', 'amount')
+      .where('payment.productId = :productId', { productId: product.id })
+      .andWhere('payment.status = :status', {
+        status: PaymentAttemptStatus.Paid,
+      })
+      .getRawOne<{ count: string; amount: string }>();
+    const paidCount = Number(summary?.count ?? 0);
+    const totalAmount = summary?.amount ?? '0.00';
+
+    const payments = await this.payments.find({
+      where: {
+        productId: product.id,
+        status: PaymentAttemptStatus.Paid,
+      },
+      relations: { user: true },
+      order: { paidAt: 'DESC', createdAt: 'DESC' },
+      take: 50,
+    });
+
+    const lines = [
+      `<b>${this.escape(product.title)}</b>`,
+      '',
+      `Оплат: ${paidCount}`,
+      `Сумма: ${this.escape(totalAmount)} ${this.escape(product.currency)}`,
+    ];
+
+    if (payments.length === 0) {
+      await this.telegram.sendMessage(
+        chatId,
+        [...lines, '', 'Оплат пока нет.'].join('\n'),
+      );
+      return;
+    }
+
+    await this.telegram.sendMessage(
+      chatId,
+      [
+        ...lines,
+        '',
+        paidCount > payments.length
+          ? `<i>Показаны последние ${payments.length} из ${paidCount} оплат.</i>`
+          : '',
+        ...payments.map((payment, index) =>
+          [
+            `${index + 1}. ${this.formatUser(payment.user)}`,
+            `Telegram ID: <code>${this.escape(payment.user.telegramId)}</code>`,
+            `Сумма: ${this.escape(payment.amount)} ${this.escape(payment.currency)}`,
+            `Дата оплаты: ${this.formatDate(payment.paidAt)}`,
+          ].join('\n'),
+        ),
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
     );
   }
 
@@ -700,6 +835,12 @@ export class AdminBotService {
         ],
         [
           {
+            text: '🏁 Марафоны',
+            callback_data: `${ADMIN_MENU_PREFIX}marathons`,
+          },
+        ],
+        [
+          {
             text: '👤 Пользователь',
             callback_data: `${ADMIN_MENU_PREFIX}user`,
           },
@@ -839,10 +980,7 @@ export class AdminBotService {
       return;
     }
 
-    if (
-      command !== '/confirm_broadcast' &&
-      text !== BROADCAST_CONFIRM_BUTTON
-    ) {
+    if (command !== '/confirm_broadcast' && text !== BROADCAST_CONFIRM_BUTTON) {
       await this.telegram.sendMessage(
         chatId,
         'Confirm or cancel the broadcast with the buttons below.',
@@ -870,13 +1008,15 @@ export class AdminBotService {
       this.getRemoveKeyboardMarkup(),
     );
 
-    void this.runBroadcast(chatId, session.text).catch(async (error: unknown) => {
-      await this.telegram.sendMessage(
-        chatId,
-        `Broadcast failed: ${this.escape(error instanceof Error ? error.message : String(error))}`,
-        this.getRemoveKeyboardMarkup(),
-      );
-    });
+    void this.runBroadcast(chatId, session.text).catch(
+      async (error: unknown) => {
+        await this.telegram.sendMessage(
+          chatId,
+          `Broadcast failed: ${this.escape(error instanceof Error ? error.message : String(error))}`,
+          this.getRemoveKeyboardMarkup(),
+        );
+      },
+    );
   }
 
   private async runBroadcast(chatId: string | number, text: string) {
@@ -1169,6 +1309,24 @@ export class AdminBotService {
     const name = [user.firstName, user.lastName].filter(Boolean).join(' ');
     const username = user.username ? `@${user.username}` : '';
     return this.escape([name, username].filter(Boolean).join(' ') || '-');
+  }
+
+  private getMarathonFlowButtonText(product: Product) {
+    const flowNumber = this.getMarathonFlowNumber(product);
+
+    if (Number.isFinite(flowNumber)) {
+      return `Поток ${flowNumber}`;
+    }
+
+    return product.title;
+  }
+
+  private getMarathonFlowNumber(product: Product) {
+    const match = product.slug.match(
+      new RegExp(`^${MARATHON_PRODUCT_SLUG_PREFIX}(\\d+)$`),
+    );
+
+    return match ? Number(match[1]) : Number.POSITIVE_INFINITY;
   }
 
   private formatPayload(payload?: Record<string, unknown>) {
