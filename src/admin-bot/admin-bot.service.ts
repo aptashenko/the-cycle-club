@@ -18,6 +18,7 @@ import { User } from '../users/user.entity';
 import { AdminTelegramApiService } from './admin-telegram-api.service';
 
 const RESOLVE_SUPPORT_PREFIX = 'support:resolve:';
+const REPLY_SUPPORT_PREFIX = 'support:reply:';
 const ADMIN_MENU_PREFIX = 'admin:menu:';
 const GRANT_SUBSCRIPTION_PRODUCT_SLUG = 'the-cycle';
 const MARATHON_PRODUCT_SLUG_PREFIX = 'marathon-';
@@ -62,6 +63,10 @@ type BroadcastButton = {
   url: string;
 };
 
+type SupportReplySession = {
+  requestId: string;
+};
+
 @Injectable()
 export class AdminBotService {
   private readonly adminIds: Set<string>;
@@ -70,6 +75,7 @@ export class AdminBotService {
     GrantSubscriptionSession
   >();
   private readonly broadcastSessions = new Map<string, BroadcastSession>();
+  private readonly supportReplySessions = new Map<string, SupportReplySession>();
   private broadcastInProgress = false;
 
   constructor(
@@ -152,6 +158,15 @@ export class AdminBotService {
       return;
     }
 
+    if (data.startsWith(REPLY_SUPPORT_PREFIX)) {
+      await this.telegram.answerCallbackQuery(callbackQuery.id);
+      await this.startSupportReply(
+        chatId,
+        data.slice(REPLY_SUPPORT_PREFIX.length),
+      );
+      return;
+    }
+
     if (data.startsWith(ADMIN_MENU_PREFIX)) {
       await this.telegram.answerCallbackQuery(callbackQuery.id);
       await this.handleMenuAction(chatId, data.slice(ADMIN_MENU_PREFIX.length));
@@ -165,6 +180,18 @@ export class AdminBotService {
     const text = message.text?.trim() ?? '';
     const [command, ...args] = text.split(/\s+/);
     const chatId = message.chat.id;
+
+    const supportReplySession = this.supportReplySessions.get(String(chatId));
+    if (supportReplySession) {
+      if (command === '/cancel') {
+        this.supportReplySessions.delete(String(chatId));
+        await this.telegram.sendMessage(chatId, 'Support reply cancelled.');
+        return;
+      }
+
+      await this.handleSupportReplyStep(chatId, text, supportReplySession);
+      return;
+    }
 
     const grantSession = this.grantSubscriptionSessions.get(String(chatId));
     if (grantSession) {
@@ -1322,7 +1349,77 @@ export class AdminBotService {
       return;
     }
 
-    const replyText = message.trim();
+    await this.sendSupportReply(chatId, request, message.trim());
+  }
+
+  private async startSupportReply(chatId: string | number, requestId?: string) {
+    if (!requestId) {
+      await this.telegram.sendMessage(chatId, 'Support request not found.');
+      return;
+    }
+
+    const request = await this.supportRequests.findOne({
+      where: { id: requestId },
+      relations: { user: true },
+    });
+
+    if (!request) {
+      await this.telegram.sendMessage(chatId, 'Support request not found.');
+      return;
+    }
+
+    this.grantSubscriptionSessions.delete(String(chatId));
+    this.broadcastSessions.delete(String(chatId));
+    this.supportReplySessions.set(String(chatId), { requestId });
+
+    await this.telegram.sendMessage(
+      chatId,
+      [
+        '<b>Reply to support request</b>',
+        '',
+        `User: ${this.formatUser(request.user)}`,
+        `Telegram ID: <code>${this.escape(request.user.telegramId)}</code>`,
+        `Topic: ${this.escape(request.topic)}`,
+        '',
+        'Send the reply text in the next message.',
+        'Use /cancel to cancel.',
+      ].join('\n'),
+    );
+  }
+
+  private async handleSupportReplyStep(
+    chatId: string | number,
+    text: string,
+    session: SupportReplySession,
+  ) {
+    if (!text) {
+      await this.telegram.sendMessage(
+        chatId,
+        'Send a non-empty support reply or use /cancel.',
+      );
+      return;
+    }
+
+    const request = await this.supportRequests.findOne({
+      where: { id: session.requestId },
+      relations: { user: true },
+    });
+
+    if (!request) {
+      this.supportReplySessions.delete(String(chatId));
+      await this.telegram.sendMessage(chatId, 'Support request not found.');
+      return;
+    }
+
+    this.supportReplySessions.delete(String(chatId));
+    await this.sendSupportReply(chatId, request, text);
+  }
+
+  private async sendSupportReply(
+    chatId: string | number,
+    request: SupportRequest,
+    replyText: string,
+  ) {
     const response = await this.mainTelegram.sendMessage(
       request.user.telegramId,
       this.escape(replyText),
@@ -1361,6 +1458,10 @@ export class AdminBotService {
       {
         inline_keyboard: [
           [
+            {
+              text: '↩️ Ответить',
+              callback_data: `${REPLY_SUPPORT_PREFIX}${request.id}`,
+            },
             {
               text: '✅ Завершить',
               callback_data: `${RESOLVE_SUPPORT_PREFIX}${request.id}`,

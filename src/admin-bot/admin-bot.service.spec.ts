@@ -37,6 +37,22 @@ function adminMessage(text: string): TelegramUpdate {
   };
 }
 
+function adminCallback(data: string): TelegramUpdate {
+  return {
+    update_id: 1,
+    callback_query: {
+      id: 'callback-id',
+      from: { id: 123, first_name: 'Admin' },
+      message: {
+        message_id: 10,
+        from: { id: 456, first_name: 'Admin bot', is_bot: true },
+        chat: { id: 123, type: 'private' },
+      },
+      data,
+    },
+  };
+}
+
 function createService() {
   const adminTelegram = {
     sendMessage: jest.fn().mockResolvedValue({ ok: true }),
@@ -58,15 +74,18 @@ function createService() {
       .mockResolvedValueOnce([{ telegramId: 'user-chat-id' }])
       .mockResolvedValueOnce([]),
   } as unknown as jest.Mocked<Repository<User>>;
+  const supportRequest = {
+    id: 'support-request-id',
+    topic: 'Оплата',
+    createdAt: new Date('2026-07-21T12:00:00.000Z'),
+    user: {
+      telegramId: 'user-chat-id',
+      firstName: 'Client',
+    },
+  } as SupportRequest;
   const supportRequests = {
-    findOne: jest.fn().mockResolvedValue({
-      id: 'support-request-id',
-      topic: 'Оплата',
-      user: {
-        telegramId: 'user-chat-id',
-        firstName: 'Client',
-      },
-    }),
+    find: jest.fn().mockResolvedValue([supportRequest]),
+    findOne: jest.fn().mockResolvedValue(supportRequest),
   } as unknown as jest.Mocked<Repository<SupportRequest>>;
 
   const service = new AdminBotService(
@@ -157,6 +176,50 @@ describe('AdminBotService', () => {
     expect(adminTelegram.sendMessage).toHaveBeenLastCalledWith(
       123,
       expect.stringContaining('Support reply sent'),
+    );
+  });
+
+  it('shows a reply button under support tickets', async () => {
+    const { service, adminTelegram } = createService();
+
+    await service.handleUpdate(adminMessage('/support'));
+
+    expect(adminTelegram.sendMessage).toHaveBeenCalledWith(
+      123,
+      expect.stringContaining('Support request'),
+      {
+        inline_keyboard: [
+          [
+            {
+              text: '↩️ Ответить',
+              callback_data: 'support:reply:support-request-id',
+            },
+            {
+              text: '✅ Завершить',
+              callback_data: 'support:resolve:support-request-id',
+            },
+          ],
+        ],
+      },
+    );
+  });
+
+  it('starts support reply from a ticket button', async () => {
+    const { service, adminTelegram, mainTelegram } = createService();
+
+    await service.handleUpdate(adminCallback('support:reply:support-request-id'));
+    await service.handleUpdate(adminMessage('Hello from button'));
+
+    expect(adminTelegram.answerCallbackQuery).toHaveBeenCalledWith(
+      'callback-id',
+    );
+    expect(adminTelegram.sendMessage).toHaveBeenCalledWith(
+      123,
+      expect.stringContaining('Reply to support request'),
+    );
+    expect(mainTelegram.sendMessage).toHaveBeenCalledWith(
+      'user-chat-id',
+      'Hello from button',
     );
   });
 });
