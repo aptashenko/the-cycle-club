@@ -8,6 +8,7 @@ import { SupportRequest } from '../support/support-request.entity';
 import { UserActivityEvent } from '../user-activity/user-activity-event.entity';
 import { User } from '../users/user.entity';
 import { AdminBotController } from './admin-bot.controller';
+import { AdminBotPollingService } from './admin-bot-polling.service';
 import { AdminBotService } from './admin-bot.service';
 import { AdminTelegramApiService } from './admin-telegram-api.service';
 
@@ -23,6 +24,11 @@ import { AdminTelegramApiService } from './admin-telegram-api.service';
     ]),
   ],
   controllers: [AdminBotController],
-  providers: [AdminBotService, AdminTelegramApiService, TelegramApiService],
+  providers: [
+    AdminBotService,
+    AdminBotPollingService,
+    AdminTelegramApiService,
+    TelegramApiService,
+  ],
 })
 export class AdminBotModule {}

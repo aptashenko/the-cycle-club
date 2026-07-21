@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { TelegramUpdate } from '../bot/telegram.types';
 
 type TelegramMarkup = Record<string, unknown>;
 type TelegramResponse<T> = {
@@ -48,6 +49,22 @@ export class AdminTelegramApiService {
       message_id: messageId,
       reply_markup: replyMarkup,
     });
+  }
+
+  async deleteWebhook(dropPendingUpdates = false) {
+    return this.request('deleteWebhook', {
+      drop_pending_updates: dropPendingUpdates,
+    });
+  }
+
+  async getUpdates(offset?: number): Promise<TelegramUpdate[]> {
+    const data = await this.request<TelegramUpdate[]>('getUpdates', {
+      offset,
+      timeout: 25,
+      allowed_updates: ['message', 'callback_query'],
+    });
+
+    return data.result ?? [];
   }
 
   private async request<T = unknown>(

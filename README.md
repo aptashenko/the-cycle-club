@@ -28,6 +28,7 @@ For local testing, use polling and mock payments:
 
 ```env
 TELEGRAM_BOT_MODE=polling
+ADMIN_TELEGRAM_BOT_MODE=polling
 PAYMENT_MODE=mock
 APP_URL=http://localhost:3000
 ```
@@ -38,6 +39,7 @@ In this mode:
 - No ngrok is needed.
 - No WayForPay account is needed.
 - The bot receives Telegram updates through `getUpdates`.
+- The admin bot receives Telegram updates through `getUpdates`.
 - Payment is confirmed through a Telegram callback button.
 
 ## Environment Variables
@@ -56,10 +58,12 @@ TELEGRAM_BOT_USERNAME=your_bot_username_without_at
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/the_cycle_club
 DATABASE_MIGRATIONS_RUN=true
 TELEGRAM_BOT_MODE=polling
+ADMIN_TELEGRAM_BOT_MODE=polling
 CLOSED_GROUP_CHAT_ID=
 PAYMENT_MODE=mock
 APP_URL=http://localhost:3000
 ADMIN_TELEGRAM_ID=your_telegram_id
+ADMIN_TELEGRAM_BOT_TOKEN=your_admin_bot_token
 MANAGER_TELEGRAM_ID=your_telegram_id
 PORT=3000
 ```
@@ -415,7 +419,12 @@ Create a second Telegram bot for admin access and configure:
 ```env
 ADMIN_TELEGRAM_BOT_TOKEN=admin_bot_token
 ADMIN_TELEGRAM_IDS=123456,789012
+ADMIN_TELEGRAM_BOT_MODE=webhook
 ```
+
+For local development without a public URL, set
+`ADMIN_TELEGRAM_BOT_MODE=polling`. The app will delete the admin bot webhook and
+receive admin updates through `getUpdates` on startup.
 
 Admin webhook endpoint:
 
@@ -460,13 +469,16 @@ given date.
 
 1. Send `/broadcast` in the admin bot.
 2. Send the broadcast text.
-3. Check the preview and recipient count.
-4. Tap the bottom `✅ Подтвердить рассылку` button to start sending, or
+3. Send button text, or tap `Без кнопки`.
+4. If button text was sent, send a `http://` or `https://` button URL.
+5. Check the preview and recipient count.
+6. Tap the bottom `✅ Подтвердить рассылку` button to start sending, or
    `❌ Отмена` to cancel.
 
 The message is sent through `TELEGRAM_BOT_TOKEN`, so users receive it from the
-main customer bot. Broadcast text is escaped and sent as plain text. Manual
-commands `/confirm_broadcast` and `/cancel` also work.
+main customer bot. Broadcast text is escaped and sent as plain text. If a URL
+button is provided, it is sent as a single inline button under the message.
+Manual commands `/confirm_broadcast` and `/cancel` also work.
 
 `/support` sends each open support request as a separate message with a
 `✅ Завершить` inline button. The same button is included in new support
@@ -590,8 +602,10 @@ For local testing with polling and mock payments, use:
 
 ```env
 TELEGRAM_BOT_MODE=polling
+ADMIN_TELEGRAM_BOT_MODE=polling
 PAYMENT_MODE=mock
 APP_URL=http://localhost:3000
 ```
 
-In this setup, all client flow can be tested directly in Telegram without a public URL.
+In this setup, all client and admin bot flow can be tested directly in Telegram
+without a public URL.

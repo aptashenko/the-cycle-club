@@ -26,6 +26,7 @@ const BROADCAST_BATCH_SIZE = 100;
 const BROADCAST_SEND_DELAY_MS = 50;
 const BROADCAST_CONFIRM_BUTTON = '✅ Подтвердить рассылку';
 const BROADCAST_CANCEL_BUTTON = '❌ Отмена';
+const BROADCAST_SKIP_BUTTON = 'Без кнопки';
 
 type GrantSubscriptionSession =
   | {
@@ -41,10 +42,25 @@ type BroadcastSession =
       step: 'message';
     }
   | {
+      step: 'buttonText';
+      text: string;
+    }
+  | {
+      step: 'buttonUrl';
+      text: string;
+      buttonText: string;
+    }
+  | {
       step: 'confirm';
       text: string;
       recipientsCount: number;
+      button?: BroadcastButton;
     };
+
+type BroadcastButton = {
+  text: string;
+  url: string;
+};
 
 @Injectable()
 export class AdminBotService {
@@ -900,6 +916,28 @@ export class AdminBotService {
     };
   }
 
+  private getBroadcastButtonTextKeyboardMarkup() {
+    return {
+      keyboard: [
+        [{ text: BROADCAST_SKIP_BUTTON }],
+        [{ text: BROADCAST_CANCEL_BUTTON }],
+      ],
+      resize_keyboard: true,
+      one_time_keyboard: false,
+      selective: true,
+    };
+  }
+
+  private getBroadcastInlineButtonMarkup(button?: BroadcastButton) {
+    if (!button) {
+      return undefined;
+    }
+
+    return {
+      inline_keyboard: [[{ text: button.text, url: button.url }]],
+    };
+  }
+
   private getRemoveKeyboardMarkup() {
     return {
       remove_keyboard: true,
@@ -925,6 +963,7 @@ export class AdminBotService {
         '',
         'Send the text message for all users.',
         'The text will be sent as plain text from the main bot.',
+        `After that you can add one URL button or tap ${BROADCAST_SKIP_BUTTON}.`,
         `Use ${BROADCAST_CANCEL_BUTTON} or /cancel to cancel.`,
       ].join('\n'),
       this.getBroadcastTextKeyboardMarkup(),
@@ -947,84 +986,180 @@ export class AdminBotService {
         return;
       }
 
-      const recipientsCount = await this.users.count();
-      if (recipientsCount === 0) {
-        this.broadcastSessions.delete(String(chatId));
-        await this.telegram.sendMessage(
-          chatId,
-          'No users to broadcast to.',
-          this.getRemoveKeyboardMarkup(),
-        );
-        return;
-      }
-
       this.broadcastSessions.set(String(chatId), {
-        step: 'confirm',
+        step: 'buttonText',
         text,
-        recipientsCount,
       });
 
       await this.telegram.sendMessage(
         chatId,
         [
-          '<b>Broadcast preview</b>',
+          '<b>Broadcast button</b>',
           '',
-          this.escape(text),
-          '',
-          `Recipients: ${recipientsCount}`,
-          '',
-          `Tap ${BROADCAST_CONFIRM_BUTTON} to start or ${BROADCAST_CANCEL_BUTTON} to cancel.`,
+          `Send button text, or tap ${BROADCAST_SKIP_BUTTON}.`,
+          'Example: Купить',
         ].join('\n'),
-        this.getBroadcastConfirmKeyboardMarkup(),
+        this.getBroadcastButtonTextKeyboardMarkup(),
       );
       return;
     }
 
-    if (command !== '/confirm_broadcast' && text !== BROADCAST_CONFIRM_BUTTON) {
+    if (session.step === 'buttonText') {
+      if (text === BROADCAST_SKIP_BUTTON) {
+        await this.prepareBroadcastPreview(chatId, session.text);
+        return;
+      }
+
+      if (!text || text.startsWith('/')) {
+        await this.telegram.sendMessage(
+          chatId,
+          'Send button text or skip the button.',
+          this.getBroadcastButtonTextKeyboardMarkup(),
+        );
+        return;
+      }
+
+      this.broadcastSessions.set(String(chatId), {
+        step: 'buttonUrl',
+        text: session.text,
+        buttonText: text,
+      });
+
       await this.telegram.sendMessage(
         chatId,
-        'Confirm or cancel the broadcast with the buttons below.',
-        this.getBroadcastConfirmKeyboardMarkup(),
+        [
+          '<b>Broadcast button URL</b>',
+          '',
+          'Send the button URL.',
+          'Example: https://example.com',
+        ].join('\n'),
+        this.getBroadcastTextKeyboardMarkup(),
       );
       return;
     }
 
-    if (this.broadcastInProgress) {
+    if (session.step === 'buttonUrl') {
+      const buttonUrl = this.normalizeBroadcastButtonUrl(text);
+      if (!buttonUrl) {
+        await this.telegram.sendMessage(
+          chatId,
+          'Send a valid http:// or https:// URL for the button.',
+          this.getBroadcastTextKeyboardMarkup(),
+        );
+        return;
+      }
+
+      await this.prepareBroadcastPreview(chatId, session.text, {
+        text: session.buttonText,
+        url: buttonUrl,
+      });
+      return;
+    }
+
+    if (session.step === 'confirm') {
+      if (
+        command !== '/confirm_broadcast' &&
+        text !== BROADCAST_CONFIRM_BUTTON
+      ) {
+        await this.telegram.sendMessage(
+          chatId,
+          'Confirm or cancel the broadcast with the buttons below.',
+          this.getBroadcastConfirmKeyboardMarkup(),
+        );
+        return;
+      }
+
+      if (this.broadcastInProgress) {
+        this.broadcastSessions.delete(String(chatId));
+        await this.telegram.sendMessage(
+          chatId,
+          'Another broadcast is already running. Try again later.',
+          this.getRemoveKeyboardMarkup(),
+        );
+        return;
+      }
+
+      this.broadcastSessions.delete(String(chatId));
+      this.broadcastInProgress = true;
+
+      await this.telegram.sendMessage(
+        chatId,
+        `Broadcast started for ${session.recipientsCount} users.`,
+        this.getRemoveKeyboardMarkup(),
+      );
+
+      void this.runBroadcast(chatId, session.text, session.button).catch(
+        async (error: unknown) => {
+          await this.telegram.sendMessage(
+            chatId,
+            `Broadcast failed: ${this.escape(error instanceof Error ? error.message : String(error))}`,
+            this.getRemoveKeyboardMarkup(),
+          );
+        },
+      );
+    }
+  }
+
+  private async prepareBroadcastPreview(
+    chatId: string | number,
+    text: string,
+    button?: BroadcastButton,
+  ) {
+    const recipientsCount = await this.users.count();
+    if (recipientsCount === 0) {
       this.broadcastSessions.delete(String(chatId));
       await this.telegram.sendMessage(
         chatId,
-        'Another broadcast is already running. Try again later.',
+        'No users to broadcast to.',
         this.getRemoveKeyboardMarkup(),
       );
       return;
     }
 
-    this.broadcastSessions.delete(String(chatId));
-    this.broadcastInProgress = true;
+    this.broadcastSessions.set(String(chatId), {
+      step: 'confirm',
+      text,
+      recipientsCount,
+      button,
+    });
 
     await this.telegram.sendMessage(
       chatId,
-      `Broadcast started for ${session.recipientsCount} users.`,
-      this.getRemoveKeyboardMarkup(),
+      [
+        '<b>Broadcast preview</b>',
+        '',
+        this.escape(text),
+        '',
+        ...(button
+          ? [
+              `Button: ${this.escape(button.text)}`,
+              `URL: ${this.escape(button.url)}`,
+              '',
+            ]
+          : []),
+        `Recipients: ${recipientsCount}`,
+      ].join('\n'),
+      this.getBroadcastInlineButtonMarkup(button),
     );
 
-    void this.runBroadcast(chatId, session.text).catch(
-      async (error: unknown) => {
-        await this.telegram.sendMessage(
-          chatId,
-          `Broadcast failed: ${this.escape(error instanceof Error ? error.message : String(error))}`,
-          this.getRemoveKeyboardMarkup(),
-        );
-      },
+    await this.telegram.sendMessage(
+      chatId,
+      `Tap ${BROADCAST_CONFIRM_BUTTON} to start or ${BROADCAST_CANCEL_BUTTON} to cancel.`,
+      this.getBroadcastConfirmKeyboardMarkup(),
     );
   }
 
-  private async runBroadcast(chatId: string | number, text: string) {
+  private async runBroadcast(
+    chatId: string | number,
+    text: string,
+    button?: BroadcastButton,
+  ) {
     let sent = 0;
     let failed = 0;
     let skipped = 0;
     let offset = 0;
     const escapedText = this.escape(text);
+    const replyMarkup = this.getBroadcastInlineButtonMarkup(button);
 
     try {
       while (true) {
@@ -1048,6 +1183,7 @@ export class AdminBotService {
           const response = (await this.mainTelegram.sendMessage(
             user.telegramId,
             escapedText,
+            replyMarkup,
           )) as { ok: boolean };
 
           if (response.ok) {
@@ -1225,6 +1361,21 @@ export class AdminBotService {
     }
 
     return username;
+  }
+
+  private normalizeBroadcastButtonUrl(value: string) {
+    const text = value.trim();
+
+    try {
+      const url = new URL(text);
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        return null;
+      }
+
+      return url.toString();
+    } catch {
+      return null;
+    }
   }
 
   private parseSubscriptionEndDate(value: string) {
