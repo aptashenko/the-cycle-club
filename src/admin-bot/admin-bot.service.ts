@@ -222,6 +222,11 @@ export class AdminBotService {
       return;
     }
 
+    if (command === '/reply_support') {
+      await this.replySupport(chatId, args[0], args.slice(1).join(' '));
+      return;
+    }
+
     if (command === '/user') {
       await this.sendUser(chatId, args[0]);
       return;
@@ -275,6 +280,7 @@ export class AdminBotService {
         '/support - open support requests',
         '/marathons - marathon flow payments',
         '/resolve_support &lt;request_id&gt; - mark support request resolved',
+        '/reply_support &lt;request_id&gt; &lt;message&gt; - reply to support user',
         '/user &lt;telegram_id&gt; - user profile',
         '/payments &lt;telegram_id&gt; - latest payments',
         '/subscriptions &lt;telegram_id&gt; - user subscriptions',
@@ -1293,6 +1299,58 @@ export class AdminBotService {
     );
   }
 
+  private async replySupport(
+    chatId: string | number,
+    requestId?: string,
+    message?: string,
+  ) {
+    if (!requestId || !message?.trim()) {
+      await this.telegram.sendMessage(
+        chatId,
+        'Usage: /reply_support &lt;request_id&gt; &lt;message&gt;',
+      );
+      return;
+    }
+
+    const request = await this.supportRequests.findOne({
+      where: { id: requestId },
+      relations: { user: true },
+    });
+
+    if (!request) {
+      await this.telegram.sendMessage(chatId, 'Support request not found.');
+      return;
+    }
+
+    const replyText = message.trim();
+    const response = await this.mainTelegram.sendMessage(
+      request.user.telegramId,
+      this.escape(replyText),
+    );
+
+    if (!response.ok) {
+      await this.telegram.sendMessage(
+        chatId,
+        `Failed to send reply: ${this.escape(response.description ?? 'Unknown error')}`,
+      );
+      return;
+    }
+
+    await this.telegram.sendMessage(
+      chatId,
+      [
+        '✅ <b>Support reply sent</b>',
+        '',
+        `ID: <code>${this.escape(request.id)}</code>`,
+        `User: ${this.formatUser(request.user)}`,
+        `Telegram ID: <code>${this.escape(request.user.telegramId)}</code>`,
+        '',
+        '<b>Reply:</b>',
+        this.escape(replyText),
+      ].join('\n'),
+    );
+  }
+
   private async sendSupportRequestMessage(
     chatId: string | number,
     request: SupportRequest,
@@ -1324,6 +1382,7 @@ export class AdminBotService {
       ...(request.message
         ? ['', '<b>Message:</b>', this.escape(request.message)]
         : []),
+      `Reply: <code>/reply_support ${this.escape(request.id)} MESSAGE</code>`,
       `Resolve: <code>/resolve_support ${this.escape(request.id)}</code>`,
     ].join('\n');
   }

@@ -58,6 +58,16 @@ function createService() {
       .mockResolvedValueOnce([{ telegramId: 'user-chat-id' }])
       .mockResolvedValueOnce([]),
   } as unknown as jest.Mocked<Repository<User>>;
+  const supportRequests = {
+    findOne: jest.fn().mockResolvedValue({
+      id: 'support-request-id',
+      topic: 'Оплата',
+      user: {
+        telegramId: 'user-chat-id',
+        firstName: 'Client',
+      },
+    }),
+  } as unknown as jest.Mocked<Repository<SupportRequest>>;
 
   const service = new AdminBotService(
     adminTelegram,
@@ -67,11 +77,11 @@ function createService() {
     {} as Repository<Product>,
     {} as Repository<Subscription>,
     {} as Repository<PaymentAttempt>,
-    {} as Repository<SupportRequest>,
+    supportRequests,
     {} as Repository<UserActivityEvent>,
   );
 
-  return { service, adminTelegram, mainTelegram, users };
+  return { service, adminTelegram, mainTelegram, users, supportRequests };
 }
 
 describe('AdminBotService', () => {
@@ -125,6 +135,28 @@ describe('AdminBotService', () => {
     expect(adminTelegram.sendMessage).toHaveBeenCalledWith(
       123,
       expect.stringContaining('Sent: 1'),
+    );
+  });
+
+  it('replies to a support request user from the admin bot', async () => {
+    const { service, adminTelegram, mainTelegram, supportRequests } =
+      createService();
+
+    await service.handleUpdate(
+      adminMessage('/reply_support support-request-id Hello <client>'),
+    );
+
+    expect(supportRequests.findOne).toHaveBeenCalledWith({
+      where: { id: 'support-request-id' },
+      relations: { user: true },
+    });
+    expect(mainTelegram.sendMessage).toHaveBeenCalledWith(
+      'user-chat-id',
+      'Hello &lt;client&gt;',
+    );
+    expect(adminTelegram.sendMessage).toHaveBeenLastCalledWith(
+      123,
+      expect.stringContaining('Support reply sent'),
     );
   });
 });
