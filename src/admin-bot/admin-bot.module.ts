@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { BotFlowService } from '../bot/bot-flow.service';
 import { PaymentAttempt } from '../payments/payment-attempt.entity';
 import { Product } from '../products/product.entity';
 import { TelegramApiService } from '../notifications/telegram-api.service';
@@ -29,6 +30,7 @@ import { AdminTelegramApiService } from './admin-telegram-api.service';
     AdminBotPollingService,
     AdminTelegramApiService,
     TelegramApiService,
+    BotFlowService,
   ],
 })
 export class AdminBotModule {}

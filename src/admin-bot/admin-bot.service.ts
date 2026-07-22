@@ -2,6 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Like, Repository } from 'typeorm';
+import {
+  BotFlowService,
+  PAYMENT_CALLBACK_PREFIX,
+} from '../bot/bot-flow.service';
 import { TelegramMessage, TelegramUpdate } from '../bot/telegram.types';
 import {
   PaymentAttemptStatus,
@@ -21,6 +25,8 @@ const RESOLVE_SUPPORT_PREFIX = 'support:resolve:';
 const REPLY_SUPPORT_PREFIX = 'support:reply:';
 const ADMIN_MENU_PREFIX = 'admin:menu:';
 const GRANT_SUBSCRIPTION_PRODUCT_SLUG = 'the-cycle';
+const MARATHON_BROADCAST_SCREEN_ID = 'marathon';
+const MARATHON_BROADCAST_PRODUCT_SLUG = 'marathon-4';
 const MARATHON_PRODUCT_SLUG_PREFIX = 'marathon-';
 const MARATHON_FLOW_ACTION_PREFIX = 'marathon:';
 const BROADCAST_BATCH_SIZE = 100;
@@ -28,6 +34,7 @@ const BROADCAST_SEND_DELAY_MS = 50;
 const BROADCAST_CONFIRM_BUTTON = '✅ Подтвердить рассылку';
 const BROADCAST_CANCEL_BUTTON = '❌ Отмена';
 const BROADCAST_SKIP_BUTTON = 'Без кнопки';
+const MARATHON_DEFAULT_TEXT_BUTTON = 'Стандартный текст';
 
 type GrantSubscriptionSession =
   | {
@@ -41,6 +48,9 @@ type GrantSubscriptionSession =
 type BroadcastSession =
   | {
       step: 'message';
+    }
+  | {
+      step: 'marathonMessage';
     }
   | {
       step: 'buttonText';
@@ -58,10 +68,17 @@ type BroadcastSession =
       button?: BroadcastButton;
     };
 
-type BroadcastButton = {
-  text: string;
-  url: string;
-};
+type BroadcastButton =
+  | {
+      text: string;
+      url: string;
+      callbackData?: never;
+    }
+  | {
+      text: string;
+      callbackData: string;
+      url?: never;
+    };
 
 type SupportReplySession = {
   requestId: string;
@@ -75,12 +92,16 @@ export class AdminBotService {
     GrantSubscriptionSession
   >();
   private readonly broadcastSessions = new Map<string, BroadcastSession>();
-  private readonly supportReplySessions = new Map<string, SupportReplySession>();
+  private readonly supportReplySessions = new Map<
+    string,
+    SupportReplySession
+  >();
   private broadcastInProgress = false;
 
   constructor(
     private readonly telegram: AdminTelegramApiService,
     private readonly mainTelegram: TelegramApiService,
+    private readonly flow: BotFlowService,
     private readonly config: ConfigService,
     @InjectRepository(User)
     private readonly users: Repository<User>,
@@ -279,6 +300,11 @@ export class AdminBotService {
       return;
     }
 
+    if (command === '/broadcast_marathon') {
+      await this.startMarathonBroadcast(chatId);
+      return;
+    }
+
     if (command === '/activity') {
       await this.sendActivity(chatId, args[0]);
       return;
@@ -313,6 +339,7 @@ export class AdminBotService {
         '/subscriptions &lt;telegram_id&gt; - user subscriptions',
         '/grant_subscription - grant The Cycle subscription by username',
         '/broadcast - send a text broadcast from the main bot',
+        '/broadcast_marathon - send marathon-4 payment broadcast',
         '/activity &lt;telegram_id&gt; - user path',
         '/cancel - cancel current dialog',
       ].join('\n'),
@@ -356,6 +383,11 @@ export class AdminBotService {
 
     if (action === 'broadcast') {
       await this.startBroadcast(chatId);
+      return;
+    }
+
+    if (action === 'broadcast_marathon') {
+      await this.startMarathonBroadcast(chatId);
       return;
     }
 
@@ -920,6 +952,12 @@ export class AdminBotService {
         ],
         [
           {
+            text: '🥑 Рассылка марафона',
+            callback_data: `${ADMIN_MENU_PREFIX}broadcast_marathon`,
+          },
+        ],
+        [
+          {
             text: '☰ Меню',
             callback_data: `${ADMIN_MENU_PREFIX}menu`,
           },
@@ -961,9 +999,29 @@ export class AdminBotService {
     };
   }
 
+  private getMarathonBroadcastTextKeyboardMarkup() {
+    return {
+      keyboard: [
+        [{ text: MARATHON_DEFAULT_TEXT_BUTTON }],
+        [{ text: BROADCAST_CANCEL_BUTTON }],
+      ],
+      resize_keyboard: true,
+      one_time_keyboard: false,
+      selective: true,
+    };
+  }
+
   private getBroadcastInlineButtonMarkup(button?: BroadcastButton) {
     if (!button) {
       return undefined;
+    }
+
+    if (button.callbackData) {
+      return {
+        inline_keyboard: [
+          [{ text: button.text, callback_data: button.callbackData }],
+        ],
+      };
     }
 
     return {
@@ -1003,12 +1061,122 @@ export class AdminBotService {
     );
   }
 
+  private async startMarathonBroadcast(chatId: string | number) {
+    if (this.broadcastInProgress) {
+      await this.telegram.sendMessage(
+        chatId,
+        'Another broadcast is already running. Try again later.',
+      );
+      return;
+    }
+
+    if (!(await this.getMarathonBroadcastButton())) {
+      await this.telegram.sendMessage(
+        chatId,
+        'Marathon payment button is not configured.',
+      );
+      return;
+    }
+
+    this.broadcastSessions.set(String(chatId), { step: 'marathonMessage' });
+
+    await this.telegram.sendMessage(
+      chatId,
+      [
+        '<b>Marathon payment broadcast</b>',
+        '',
+        'Send the text for the marathon broadcast.',
+        `Tap ${MARATHON_DEFAULT_TEXT_BUTTON} to use the text from the marathon screen.`,
+        `Use ${BROADCAST_CANCEL_BUTTON} or /cancel to cancel.`,
+      ].join('\n'),
+      this.getMarathonBroadcastTextKeyboardMarkup(),
+    );
+  }
+
+  private async prepareMarathonBroadcastPreview(
+    chatId: string | number,
+    text: string,
+  ) {
+    const button = await this.getMarathonBroadcastButton();
+    if (!button) {
+      this.broadcastSessions.delete(String(chatId));
+      await this.telegram.sendMessage(
+        chatId,
+        'Marathon payment button is not configured.',
+        this.getRemoveKeyboardMarkup(),
+      );
+      return;
+    }
+
+    await this.prepareBroadcastPreview(chatId, text, button);
+  }
+
+  private async getMarathonBroadcastButton(): Promise<BroadcastButton | null> {
+    const product = await this.products.findOne({
+      where: { slug: MARATHON_BROADCAST_PRODUCT_SLUG, isActive: true },
+    });
+
+    if (!product) {
+      return null;
+    }
+
+    const keyboard = this.flow.buildScreenInlineKeyboard(
+      MARATHON_BROADCAST_SCREEN_ID,
+      {
+        productsBySlug: {
+          [product.slug]: {
+            price: product.price,
+            currency: product.currency,
+          },
+        },
+      },
+    );
+    const paymentButton = keyboard
+      ?.flat()
+      .find(
+        (button) =>
+          button.callback_data ===
+          `${PAYMENT_CALLBACK_PREFIX}${MARATHON_BROADCAST_PRODUCT_SLUG}`,
+      );
+
+    if (!paymentButton?.callback_data) {
+      return null;
+    }
+
+    return {
+      text: paymentButton.text,
+      callbackData: paymentButton.callback_data,
+    };
+  }
+
   private async handleBroadcastStep(
     chatId: string | number,
     text: string,
     command: string,
     session: BroadcastSession,
   ) {
+    if (session.step === 'marathonMessage') {
+      if (text === MARATHON_DEFAULT_TEXT_BUTTON) {
+        await this.prepareMarathonBroadcastPreview(
+          chatId,
+          this.flow.getScreenText(MARATHON_BROADCAST_SCREEN_ID),
+        );
+        return;
+      }
+
+      if (!text || text.startsWith('/')) {
+        await this.telegram.sendMessage(
+          chatId,
+          'Send a non-empty marathon broadcast text or cancel the broadcast.',
+          this.getMarathonBroadcastTextKeyboardMarkup(),
+        );
+        return;
+      }
+
+      await this.prepareMarathonBroadcastPreview(chatId, text);
+      return;
+    }
+
     if (session.step === 'message') {
       if (!text || text.startsWith('/')) {
         await this.telegram.sendMessage(
@@ -1166,7 +1334,9 @@ export class AdminBotService {
         ...(button
           ? [
               `Button: ${this.escape(button.text)}`,
-              `URL: ${this.escape(button.url)}`,
+              button.url
+                ? `URL: ${this.escape(button.url)}`
+                : `Callback: <code>${this.escape(button.callbackData ?? '')}</code>`,
               '',
             ]
           : []),

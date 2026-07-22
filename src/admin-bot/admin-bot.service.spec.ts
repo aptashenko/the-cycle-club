@@ -1,5 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
+import { BotFlowService } from '../bot/bot-flow.service';
 import { TelegramUpdate } from '../bot/telegram.types';
 import { PaymentAttempt } from '../payments/payment-attempt.entity';
 import { Product } from '../products/product.entity';
@@ -13,7 +14,8 @@ import { AdminTelegramApiService } from './admin-telegram-api.service';
 
 type BroadcastButton = {
   text: string;
-  url: string;
+  url?: string;
+  callbackData?: string;
 };
 
 type AdminBotServicePrivate = {
@@ -62,6 +64,19 @@ function createService() {
   const mainTelegram = {
     sendMessage: jest.fn().mockResolvedValue({ ok: true }),
   } as unknown as jest.Mocked<TelegramApiService>;
+  const flow = {
+    getScreenText: jest
+      .fn()
+      .mockReturnValue('Marathon <b>payment</b> broadcast'),
+    buildScreenInlineKeyboard: jest.fn().mockReturnValue([
+      [
+        {
+          text: 'Записаться на марафон 1499.00 UAH',
+          callback_data: 'payment:start:marathon-4',
+        },
+      ],
+    ]),
+  } as unknown as jest.Mocked<BotFlowService>;
   const config = {
     get: jest.fn((key: string, defaultValue?: string) =>
       key === 'ADMIN_TELEGRAM_IDS' ? '123' : defaultValue,
@@ -87,20 +102,38 @@ function createService() {
     find: jest.fn().mockResolvedValue([supportRequest]),
     findOne: jest.fn().mockResolvedValue(supportRequest),
   } as unknown as jest.Mocked<Repository<SupportRequest>>;
+  const products = {
+    findOne: jest.fn().mockResolvedValue({
+      slug: 'marathon-4',
+      title: 'Марафон по детоксу - 4 поток',
+      price: '1499.00',
+      currency: 'UAH',
+      isActive: true,
+    }),
+  } as unknown as jest.Mocked<Repository<Product>>;
 
   const service = new AdminBotService(
     adminTelegram,
     mainTelegram,
+    flow,
     config,
     users,
-    {} as Repository<Product>,
+    products,
     {} as Repository<Subscription>,
     {} as Repository<PaymentAttempt>,
     supportRequests,
     {} as Repository<UserActivityEvent>,
   );
 
-  return { service, adminTelegram, mainTelegram, users, supportRequests };
+  return {
+    service,
+    adminTelegram,
+    mainTelegram,
+    users,
+    supportRequests,
+    products,
+    flow,
+  };
 }
 
 describe('AdminBotService', () => {
@@ -157,6 +190,60 @@ describe('AdminBotService', () => {
     );
   });
 
+  it('starts a marathon payment broadcast with an inline callback button', async () => {
+    const { service, adminTelegram } = createService();
+    const privateService = service as unknown as AdminBotServicePrivate;
+    const runBroadcast = jest
+      .spyOn(privateService, 'runBroadcast')
+      .mockResolvedValue(undefined);
+
+    await service.handleUpdate(adminMessage('/broadcast_marathon'));
+    await service.handleUpdate(adminMessage('Стандартный текст'));
+    await service.handleUpdate(adminMessage('✅ Подтвердить рассылку'));
+
+    expect(adminTelegram.sendMessage).toHaveBeenCalledWith(
+      123,
+      expect.stringContaining(
+        'Callback: <code>payment:start:marathon-4</code>',
+      ),
+      {
+        inline_keyboard: [
+          [
+            {
+              text: 'Записаться на марафон 1499.00 UAH',
+              callback_data: 'payment:start:marathon-4',
+            },
+          ],
+        ],
+      },
+    );
+    expect(runBroadcast).toHaveBeenCalledWith(
+      123,
+      'Marathon <b>payment</b> broadcast',
+      {
+        text: 'Записаться на марафон 1499.00 UAH',
+        callbackData: 'payment:start:marathon-4',
+      },
+    );
+  });
+
+  it('starts a marathon payment broadcast with custom text', async () => {
+    const { service } = createService();
+    const privateService = service as unknown as AdminBotServicePrivate;
+    const runBroadcast = jest
+      .spyOn(privateService, 'runBroadcast')
+      .mockResolvedValue(undefined);
+
+    await service.handleUpdate(adminMessage('/broadcast_marathon'));
+    await service.handleUpdate(adminMessage('Мой текст про марафон'));
+    await service.handleUpdate(adminMessage('✅ Подтвердить рассылку'));
+
+    expect(runBroadcast).toHaveBeenCalledWith(123, 'Мой текст про марафон', {
+      text: 'Записаться на марафон 1499.00 UAH',
+      callbackData: 'payment:start:marathon-4',
+    });
+  });
+
   it('replies to a support request user from the admin bot', async () => {
     const { service, adminTelegram, mainTelegram, supportRequests } =
       createService();
@@ -207,7 +294,9 @@ describe('AdminBotService', () => {
   it('starts support reply from a ticket button', async () => {
     const { service, adminTelegram, mainTelegram } = createService();
 
-    await service.handleUpdate(adminCallback('support:reply:support-request-id'));
+    await service.handleUpdate(
+      adminCallback('support:reply:support-request-id'),
+    );
     await service.handleUpdate(adminMessage('Hello from button'));
 
     expect(adminTelegram.answerCallbackQuery).toHaveBeenCalledWith(
