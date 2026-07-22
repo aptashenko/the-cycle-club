@@ -199,6 +199,7 @@ describe('AdminBotService', () => {
 
     await service.handleUpdate(adminMessage('/broadcast_marathon'));
     await service.handleUpdate(adminMessage('Стандартный текст'));
+    await service.handleUpdate(adminMessage('Стандартная кнопка'));
     await service.handleUpdate(adminMessage('✅ Подтвердить рассылку'));
 
     expect(adminTelegram.sendMessage).toHaveBeenCalledWith(
@@ -236,10 +237,29 @@ describe('AdminBotService', () => {
 
     await service.handleUpdate(adminMessage('/broadcast_marathon'));
     await service.handleUpdate(adminMessage('Мой текст про марафон'));
+    await service.handleUpdate(adminMessage('Стандартная кнопка'));
     await service.handleUpdate(adminMessage('✅ Подтвердить рассылку'));
 
     expect(runBroadcast).toHaveBeenCalledWith(123, 'Мой текст про марафон', {
       text: 'Записаться на марафон 1499.00 UAH',
+      callbackData: 'payment:start:marathon-4',
+    });
+  });
+
+  it('starts a marathon payment broadcast with custom button text', async () => {
+    const { service } = createService();
+    const privateService = service as unknown as AdminBotServicePrivate;
+    const runBroadcast = jest
+      .spyOn(privateService, 'runBroadcast')
+      .mockResolvedValue(undefined);
+
+    await service.handleUpdate(adminMessage('/broadcast_marathon'));
+    await service.handleUpdate(adminMessage('Мой текст про марафон'));
+    await service.handleUpdate(adminMessage('Оплатить марафон'));
+    await service.handleUpdate(adminMessage('✅ Подтвердить рассылку'));
+
+    expect(runBroadcast).toHaveBeenCalledWith(123, 'Мой текст про марафон', {
+      text: 'Оплатить марафон',
       callbackData: 'payment:start:marathon-4',
     });
   });

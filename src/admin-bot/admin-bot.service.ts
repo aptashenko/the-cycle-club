@@ -35,6 +35,7 @@ const BROADCAST_CONFIRM_BUTTON = '✅ Подтвердить рассылку';
 const BROADCAST_CANCEL_BUTTON = '❌ Отмена';
 const BROADCAST_SKIP_BUTTON = 'Без кнопки';
 const MARATHON_DEFAULT_TEXT_BUTTON = 'Стандартный текст';
+const MARATHON_DEFAULT_BUTTON_TEXT_BUTTON = 'Стандартная кнопка';
 
 type GrantSubscriptionSession =
   | {
@@ -53,6 +54,10 @@ type BroadcastSession =
       step: 'marathonMessage';
     }
   | {
+      step: 'marathonButtonText';
+      text: string;
+    }
+  | {
       step: 'buttonText';
       text: string;
     }
@@ -68,17 +73,19 @@ type BroadcastSession =
       button?: BroadcastButton;
     };
 
-type BroadcastButton =
-  | {
-      text: string;
-      url: string;
-      callbackData?: never;
-    }
-  | {
-      text: string;
-      callbackData: string;
-      url?: never;
-    };
+type UrlBroadcastButton = {
+  text: string;
+  url: string;
+  callbackData?: never;
+};
+
+type CallbackBroadcastButton = {
+  text: string;
+  callbackData: string;
+  url?: never;
+};
+
+type BroadcastButton = UrlBroadcastButton | CallbackBroadcastButton;
 
 type SupportReplySession = {
   requestId: string;
@@ -1011,6 +1018,18 @@ export class AdminBotService {
     };
   }
 
+  private getMarathonBroadcastButtonTextKeyboardMarkup() {
+    return {
+      keyboard: [
+        [{ text: MARATHON_DEFAULT_BUTTON_TEXT_BUTTON }],
+        [{ text: BROADCAST_CANCEL_BUTTON }],
+      ],
+      resize_keyboard: true,
+      one_time_keyboard: false,
+      selective: true,
+    };
+  }
+
   private getBroadcastInlineButtonMarkup(button?: BroadcastButton) {
     if (!button) {
       return undefined;
@@ -1096,6 +1115,7 @@ export class AdminBotService {
   private async prepareMarathonBroadcastPreview(
     chatId: string | number,
     text: string,
+    buttonText?: string,
   ) {
     const button = await this.getMarathonBroadcastButton();
     if (!button) {
@@ -1108,10 +1128,13 @@ export class AdminBotService {
       return;
     }
 
-    await this.prepareBroadcastPreview(chatId, text, button);
+    await this.prepareBroadcastPreview(chatId, text, {
+      ...button,
+      text: buttonText ?? button.text,
+    });
   }
 
-  private async getMarathonBroadcastButton(): Promise<BroadcastButton | null> {
+  private async getMarathonBroadcastButton(): Promise<CallbackBroadcastButton | null> {
     const product = await this.products.findOne({
       where: { slug: MARATHON_BROADCAST_PRODUCT_SLUG, isActive: true },
     });
@@ -1149,6 +1172,28 @@ export class AdminBotService {
     };
   }
 
+  private async askMarathonBroadcastButtonText(
+    chatId: string | number,
+    text: string,
+  ) {
+    this.broadcastSessions.set(String(chatId), {
+      step: 'marathonButtonText',
+      text,
+    });
+
+    await this.telegram.sendMessage(
+      chatId,
+      [
+        '<b>Marathon payment button</b>',
+        '',
+        'Send the button text.',
+        `Tap ${MARATHON_DEFAULT_BUTTON_TEXT_BUTTON} to use the configured button text.`,
+        'Example: Оплатить марафон',
+      ].join('\n'),
+      this.getMarathonBroadcastButtonTextKeyboardMarkup(),
+    );
+  }
+
   private async handleBroadcastStep(
     chatId: string | number,
     text: string,
@@ -1157,7 +1202,7 @@ export class AdminBotService {
   ) {
     if (session.step === 'marathonMessage') {
       if (text === MARATHON_DEFAULT_TEXT_BUTTON) {
-        await this.prepareMarathonBroadcastPreview(
+        await this.askMarathonBroadcastButtonText(
           chatId,
           this.flow.getScreenText(MARATHON_BROADCAST_SCREEN_ID),
         );
@@ -1173,7 +1218,26 @@ export class AdminBotService {
         return;
       }
 
-      await this.prepareMarathonBroadcastPreview(chatId, text);
+      await this.askMarathonBroadcastButtonText(chatId, text);
+      return;
+    }
+
+    if (session.step === 'marathonButtonText') {
+      if (text === MARATHON_DEFAULT_BUTTON_TEXT_BUTTON) {
+        await this.prepareMarathonBroadcastPreview(chatId, session.text);
+        return;
+      }
+
+      if (!text || text.startsWith('/')) {
+        await this.telegram.sendMessage(
+          chatId,
+          'Send a non-empty marathon button text or cancel the broadcast.',
+          this.getMarathonBroadcastButtonTextKeyboardMarkup(),
+        );
+        return;
+      }
+
+      await this.prepareMarathonBroadcastPreview(chatId, session.text, text);
       return;
     }
 
