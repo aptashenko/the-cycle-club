@@ -16,12 +16,7 @@
     "price": "1499.00",
     "currency": "UAH",
     "type": "one_time",
-    "downloadFiles": [
-      {
-        "title": "Перейти в канал марафона ✅",
-        "url": "https://t.me/+6uoNrf4HfW5lOTgy"
-      }
-    ],
+    "downloadFiles": [],
     "isActive": true
   },
   {

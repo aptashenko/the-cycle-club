@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AdminTelegramApiService } from '../admin-bot/admin-telegram-api.service';
 import { BotFlowService } from '../bot/bot-flow.service';
 import { ProductType } from '../common/enums';
+import { InviteLinksService } from '../invite-links/invite-links.service';
 import { PaymentAttempt } from '../payments/payment-attempt.entity';
 import { Product } from '../products/product.entity';
 import { Subscription } from '../subscriptions/subscription.entity';
@@ -11,14 +12,20 @@ import { User } from '../users/user.entity';
 import { TelegramApiService } from './telegram-api.service';
 
 const RESOLVE_SUPPORT_PREFIX = 'support:resolve:';
+const MARATHON_PRODUCT_SLUG = 'marathon-4';
+const MARATHON_CHANNEL_CHAT_ID = 'MARATHON_CHANNEL_CHAT_ID';
+const MARATHON_INVITE_EXPIRES_IN_SECONDS = 'MARATHON_INVITE_EXPIRES_IN_SECONDS';
 
 @Injectable()
 export class NotificationService {
+  private readonly logger = new Logger(NotificationService.name);
+
   constructor(
     private readonly config: ConfigService,
     private readonly telegram: TelegramApiService,
     private readonly adminTelegram: AdminTelegramApiService,
     private readonly flow: BotFlowService,
+    private readonly inviteLinks: InviteLinksService,
   ) {}
 
   async notifyPaymentSuccess(
@@ -40,6 +47,7 @@ export class NotificationService {
     );
 
     if (!isSubscriptionProduct) {
+      await this.sendGeneratedAccessLinks(paymentAttempt);
       await this.sendDownloadLinks(paymentAttempt);
     }
 
@@ -181,6 +189,87 @@ export class NotificationService {
       paymentAttempt.user,
       paymentAttempt.product,
     );
+  }
+
+  private async sendGeneratedAccessLinks(paymentAttempt: PaymentAttempt) {
+    if (paymentAttempt.product.slug !== MARATHON_PRODUCT_SLUG) {
+      return;
+    }
+
+    const channelChatId = this.config.get<string>(MARATHON_CHANNEL_CHAT_ID);
+    if (!channelChatId) {
+      await this.sendAdminMessage(
+        [
+          '⚠️ <b>Не удалось отправить ссылку марафона</b>',
+          '',
+          `Не задан <code>${MARATHON_CHANNEL_CHAT_ID}</code>.`,
+          '',
+          '<b>Пользователь:</b>',
+          this.formatUser(paymentAttempt.user),
+          '',
+          '<b>ID:</b>',
+          paymentAttempt.user.telegramId,
+        ].join('\n'),
+      );
+      return;
+    }
+
+    try {
+      const invite = await this.inviteLinks.createSingleUseInviteLink({
+        chatId: channelChatId,
+        name: this.buildInviteLinkName(paymentAttempt),
+        expireInSeconds: this.getMarathonInviteExpiresInSeconds(),
+      });
+
+      await this.telegram.sendMessage(
+        paymentAttempt.user.telegramId,
+        [
+          'Доступ к каналу марафона готов ✅',
+          '',
+          'Ссылка индивидуальная и рассчитана на одно вступление.',
+        ].join('\n'),
+        {
+          inline_keyboard: [
+            [
+              {
+                text: 'Перейти в канал марафона ✅',
+                url: invite.inviteLink,
+              },
+            ],
+          ],
+        },
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to create marathon invite link: ${message}`);
+      await this.sendAdminMessage(
+        [
+          '⚠️ <b>Не удалось создать ссылку марафона</b>',
+          '',
+          `<b>Ошибка:</b> ${this.escape(message)}`,
+          '',
+          '<b>Пользователь:</b>',
+          this.formatUser(paymentAttempt.user),
+          '',
+          '<b>ID:</b>',
+          paymentAttempt.user.telegramId,
+        ].join('\n'),
+      );
+    }
+  }
+
+  private getMarathonInviteExpiresInSeconds(): number | undefined {
+    const raw = this.config.get<string>(MARATHON_INVITE_EXPIRES_IN_SECONDS);
+    if (!raw) {
+      return undefined;
+    }
+
+    const seconds = Number(raw);
+    return Number.isFinite(seconds) && seconds > 0 ? seconds : undefined;
+  }
+
+  private buildInviteLinkName(paymentAttempt: PaymentAttempt): string {
+    return `${paymentAttempt.product.slug}:${paymentAttempt.id.slice(0, 12)}`;
   }
 
   private async sendProductDownloadLinks(user: User, product: Product) {

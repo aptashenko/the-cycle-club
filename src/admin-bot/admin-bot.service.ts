@@ -12,6 +12,7 @@ import {
   SubscriptionStatus,
   SupportRequestStatus,
 } from '../common/enums';
+import { InviteLinksService } from '../invite-links/invite-links.service';
 import { PaymentAttempt } from '../payments/payment-attempt.entity';
 import { Product } from '../products/product.entity';
 import { TelegramApiService } from '../notifications/telegram-api.service';
@@ -29,6 +30,8 @@ const MARATHON_BROADCAST_SCREEN_ID = 'marathon';
 const MARATHON_BROADCAST_PRODUCT_SLUG = 'marathon-4';
 const MARATHON_PRODUCT_SLUG_PREFIX = 'marathon-';
 const MARATHON_FLOW_ACTION_PREFIX = 'marathon:';
+const MARATHON_CHANNEL_CHAT_ID = 'MARATHON_CHANNEL_CHAT_ID';
+const MARATHON_INVITE_EXPIRES_IN_SECONDS = 'MARATHON_INVITE_EXPIRES_IN_SECONDS';
 const BROADCAST_BATCH_SIZE = 100;
 const BROADCAST_SEND_DELAY_MS = 50;
 const BROADCAST_CONFIRM_BUTTON = '✅ Подтвердить рассылку';
@@ -36,6 +39,23 @@ const BROADCAST_CANCEL_BUTTON = '❌ Отмена';
 const BROADCAST_SKIP_BUTTON = 'Без кнопки';
 const MARATHON_DEFAULT_TEXT_BUTTON = 'Стандартный текст';
 const MARATHON_DEFAULT_BUTTON_TEXT_BUTTON = 'Стандартная кнопка';
+const ADMIN_MENU_BUTTON = '☰ Меню';
+const ADMIN_STATS_BUTTON = '📊 Статистика';
+const ADMIN_MARATHON_MENU_BUTTON = '🏁 Марафон';
+const ADMIN_USERS_MENU_BUTTON = '👥 Пользователи';
+const ADMIN_COMMUNICATION_MENU_BUTTON = '💬 Коммуникации';
+const ADMIN_GRANT_SUBSCRIPTION_BUTTON = '➕ Выдать подписку';
+const ADMIN_MARATHON_4_BUTTON = '🥑 Марафон №4';
+const ADMIN_MARATHON_BROADCAST_BUTTON = '📣 Рассылка марафона №4';
+const ADMIN_ALL_MARATHONS_BUTTON = '🏁 Все марафоны';
+const ADMIN_SINGLE_USE_INVITE_BUTTON = '🔗 Получить разовую инвайт-ссылку';
+const ADMIN_BACK_BUTTON = '← Назад';
+const ADMIN_USER_BUTTON = '👤 Пользователь';
+const ADMIN_PAYMENTS_BUTTON = '💳 Платежи';
+const ADMIN_SUBSCRIPTIONS_BUTTON = '🎟 Подписки';
+const ADMIN_ACTIVITY_BUTTON = '🧭 Активность';
+const ADMIN_SUPPORT_BUTTON = '💬 Поддержка';
+const ADMIN_BROADCAST_BUTTON = '📣 Рассылка';
 
 type GrantSubscriptionSession =
   | {
@@ -91,6 +111,15 @@ type SupportReplySession = {
   requestId: string;
 };
 
+type AdminMenuContext =
+  | {
+      section: 'main' | 'marathonList' | 'users' | 'communication';
+    }
+  | {
+      section: 'marathonFlow';
+      productSlug: string;
+    };
+
 @Injectable()
 export class AdminBotService {
   private readonly adminIds: Set<string>;
@@ -103,12 +132,14 @@ export class AdminBotService {
     string,
     SupportReplySession
   >();
+  private readonly adminMenuContexts = new Map<string, AdminMenuContext>();
   private broadcastInProgress = false;
 
   constructor(
     private readonly telegram: AdminTelegramApiService,
     private readonly mainTelegram: TelegramApiService,
     private readonly flow: BotFlowService,
+    private readonly inviteLinks: InviteLinksService,
     private readonly config: ConfigService,
     @InjectRepository(User)
     private readonly users: Repository<User>,
@@ -257,6 +288,10 @@ export class AdminBotService {
       return;
     }
 
+    if (await this.handleMenuButton(chatId, text)) {
+      return;
+    }
+
     if (command === '/stats') {
       await this.sendStats(chatId);
       return;
@@ -328,7 +363,164 @@ export class AdminBotService {
     return this.adminIds.has(String(telegramId));
   }
 
+  private async handleMenuButton(
+    chatId: string | number,
+    text: string,
+  ): Promise<boolean> {
+    const context = this.getAdminMenuContext(chatId);
+
+    if (text === ADMIN_MENU_BUTTON) {
+      await this.sendHelp(chatId);
+      return true;
+    }
+
+    if (text === ADMIN_BACK_BUTTON) {
+      if (context?.section === 'marathonFlow') {
+        await this.sendMarathonMenu(chatId);
+        return true;
+      }
+
+      await this.sendHelp(chatId);
+      return true;
+    }
+
+    if (text === ADMIN_STATS_BUTTON) {
+      if (context?.section === 'marathonFlow') {
+        await this.sendMarathonPayments(chatId, context.productSlug);
+        return true;
+      }
+
+      await this.sendStats(chatId);
+      return true;
+    }
+
+    if (text === ADMIN_MARATHON_MENU_BUTTON) {
+      await this.sendMarathonMenu(chatId);
+      return true;
+    }
+
+    if (text === ADMIN_USERS_MENU_BUTTON) {
+      this.setAdminMenuContext(chatId, { section: 'users' });
+      await this.sendAdminSubmenu(
+        chatId,
+        'Пользователи',
+        this.getUsersMenuMarkup(),
+      );
+      return true;
+    }
+
+    if (text === ADMIN_COMMUNICATION_MENU_BUTTON) {
+      this.setAdminMenuContext(chatId, { section: 'communication' });
+      await this.sendAdminSubmenu(
+        chatId,
+        'Коммуникации',
+        this.getCommunicationMenuMarkup(),
+      );
+      return true;
+    }
+
+    if (text === ADMIN_GRANT_SUBSCRIPTION_BUTTON) {
+      this.setAdminMenuContext(chatId, { section: 'main' });
+      await this.startGrantSubscription(chatId);
+      return true;
+    }
+
+    if (text === ADMIN_MARATHON_4_BUTTON) {
+      await this.sendMarathonFlowMenu(chatId, 'marathon-4');
+      return true;
+    }
+
+    if (text === ADMIN_MARATHON_BROADCAST_BUTTON) {
+      await this.startMarathonBroadcast(chatId);
+      return true;
+    }
+
+    if (text === ADMIN_ALL_MARATHONS_BUTTON) {
+      await this.sendMarathonFlows(chatId);
+      return true;
+    }
+
+    if (text === ADMIN_USER_BUTTON) {
+      await this.sendCommandHint(
+        chatId,
+        'User profile',
+        '/user &lt;telegram_id&gt;',
+        '/user 123456789',
+      );
+      return true;
+    }
+
+    if (text === ADMIN_PAYMENTS_BUTTON) {
+      await this.sendCommandHint(
+        chatId,
+        'Latest payments',
+        '/payments &lt;telegram_id&gt;',
+        '/payments 123456789',
+      );
+      return true;
+    }
+
+    if (text === ADMIN_SUBSCRIPTIONS_BUTTON) {
+      await this.sendCommandHint(
+        chatId,
+        'User subscriptions',
+        '/subscriptions &lt;telegram_id&gt;',
+        '/subscriptions 123456789',
+      );
+      return true;
+    }
+
+    if (text === ADMIN_ACTIVITY_BUTTON) {
+      await this.sendCommandHint(
+        chatId,
+        'User activity',
+        '/activity &lt;telegram_id&gt;',
+        '/activity 123456789',
+      );
+      return true;
+    }
+
+    if (text === ADMIN_SUPPORT_BUTTON) {
+      await this.sendSupport(chatId);
+      return true;
+    }
+
+    if (text === ADMIN_BROADCAST_BUTTON) {
+      if (context?.section === 'marathonFlow') {
+        await this.startMarathonBroadcast(chatId);
+        return true;
+      }
+
+      await this.startBroadcast(chatId);
+      return true;
+    }
+
+    if (text === ADMIN_SINGLE_USE_INVITE_BUTTON) {
+      if (context?.section === 'marathonFlow') {
+        await this.sendSingleUseInviteLink(chatId, context.productSlug);
+        return true;
+      }
+
+      return false;
+    }
+
+    return false;
+  }
+
+  private getAdminMenuContext(chatId: string | number) {
+    return this.adminMenuContexts.get(String(chatId));
+  }
+
+  private setAdminMenuContext(
+    chatId: string | number,
+    context: AdminMenuContext,
+  ) {
+    this.adminMenuContexts.set(String(chatId), context);
+  }
+
   private async sendHelp(chatId: string | number) {
+    this.setAdminMenuContext(chatId, { section: 'main' });
+
     await this.telegram.sendMessage(
       chatId,
       [
@@ -360,6 +552,31 @@ export class AdminBotService {
       return;
     }
 
+    if (action === 'menu:marathon') {
+      await this.sendMarathonMenu(chatId);
+      return;
+    }
+
+    if (action === 'menu:users') {
+      this.setAdminMenuContext(chatId, { section: 'users' });
+      await this.sendAdminSubmenu(
+        chatId,
+        'Пользователи',
+        this.getUsersMenuMarkup(),
+      );
+      return;
+    }
+
+    if (action === 'menu:communication') {
+      this.setAdminMenuContext(chatId, { section: 'communication' });
+      await this.sendAdminSubmenu(
+        chatId,
+        'Коммуникации',
+        this.getCommunicationMenuMarkup(),
+      );
+      return;
+    }
+
     if (action === 'stats') {
       await this.sendStats(chatId);
       return;
@@ -376,7 +593,7 @@ export class AdminBotService {
     }
 
     if (action.startsWith(MARATHON_FLOW_ACTION_PREFIX)) {
-      await this.sendMarathonPayments(
+      await this.sendMarathonFlowMenu(
         chatId,
         action.slice(MARATHON_FLOW_ACTION_PREFIX.length),
       );
@@ -456,6 +673,43 @@ export class AdminBotService {
         `Example: <code>${example}</code>`,
       ].join('\n'),
       this.getAdminMenuMarkup(),
+    );
+  }
+
+  private async sendAdminSubmenu(
+    chatId: string | number,
+    title: string,
+    replyMarkup: Record<string, unknown>,
+  ) {
+    await this.telegram.sendMessage(
+      chatId,
+      [`<b>${this.escape(title)}</b>`, '', 'Выберите действие:'].join('\n'),
+      replyMarkup,
+    );
+  }
+
+  private async sendMarathonMenu(chatId: string | number) {
+    this.setAdminMenuContext(chatId, { section: 'marathonList' });
+    await this.sendAdminSubmenu(
+      chatId,
+      'Марафон',
+      this.getMarathonMenuMarkup(),
+    );
+  }
+
+  private async sendMarathonFlowMenu(
+    chatId: string | number,
+    productSlug: string,
+  ) {
+    this.setAdminMenuContext(chatId, {
+      section: 'marathonFlow',
+      productSlug,
+    });
+
+    await this.sendAdminSubmenu(
+      chatId,
+      this.getMarathonFlowMenuTitle(productSlug),
+      this.getMarathonFlowMenuMarkup(),
     );
   }
 
@@ -910,66 +1164,75 @@ export class AdminBotService {
 
   private getAdminMenuMarkup() {
     return {
-      inline_keyboard: [
-        [
-          {
-            text: '📊 Статистика',
-            callback_data: `${ADMIN_MENU_PREFIX}stats`,
-          },
-          {
-            text: '💬 Поддержка',
-            callback_data: `${ADMIN_MENU_PREFIX}support`,
-          },
-        ],
-        [
-          {
-            text: '🏁 Марафоны',
-            callback_data: `${ADMIN_MENU_PREFIX}marathons`,
-          },
-        ],
-        [
-          {
-            text: '👤 Пользователь',
-            callback_data: `${ADMIN_MENU_PREFIX}user`,
-          },
-          {
-            text: '💳 Платежи',
-            callback_data: `${ADMIN_MENU_PREFIX}payments`,
-          },
-        ],
-        [
-          {
-            text: '🎟 Подписки',
-            callback_data: `${ADMIN_MENU_PREFIX}subscriptions`,
-          },
-          {
-            text: '🧭 Активность',
-            callback_data: `${ADMIN_MENU_PREFIX}activity`,
-          },
-        ],
-        [
-          {
-            text: '➕ Выдать подписку',
-            callback_data: `${ADMIN_MENU_PREFIX}grant_subscription`,
-          },
-          {
-            text: '📣 Рассылка',
-            callback_data: `${ADMIN_MENU_PREFIX}broadcast`,
-          },
-        ],
-        [
-          {
-            text: '🥑 Рассылка марафона',
-            callback_data: `${ADMIN_MENU_PREFIX}broadcast_marathon`,
-          },
-        ],
-        [
-          {
-            text: '☰ Меню',
-            callback_data: `${ADMIN_MENU_PREFIX}menu`,
-          },
-        ],
+      keyboard: [
+        [{ text: ADMIN_STATS_BUTTON }],
+        [{ text: ADMIN_MARATHON_MENU_BUTTON }],
+        [{ text: ADMIN_USERS_MENU_BUTTON }],
+        [{ text: ADMIN_COMMUNICATION_MENU_BUTTON }],
+        [{ text: ADMIN_GRANT_SUBSCRIPTION_BUTTON }],
+        [{ text: ADMIN_MENU_BUTTON }],
       ],
+      resize_keyboard: true,
+      one_time_keyboard: false,
+      is_persistent: true,
+      selective: true,
+    };
+  }
+
+  private getMarathonMenuMarkup() {
+    return {
+      keyboard: [
+        [{ text: ADMIN_MARATHON_4_BUTTON }],
+        [{ text: ADMIN_BACK_BUTTON }],
+      ],
+      resize_keyboard: true,
+      one_time_keyboard: false,
+      is_persistent: true,
+      selective: true,
+    };
+  }
+
+  private getMarathonFlowMenuMarkup() {
+    return {
+      keyboard: [
+        [{ text: ADMIN_STATS_BUTTON }],
+        [{ text: ADMIN_BROADCAST_BUTTON }],
+        [{ text: ADMIN_SINGLE_USE_INVITE_BUTTON }],
+        [{ text: ADMIN_BACK_BUTTON }],
+      ],
+      resize_keyboard: true,
+      one_time_keyboard: false,
+      is_persistent: true,
+      selective: true,
+    };
+  }
+
+  private getUsersMenuMarkup() {
+    return {
+      keyboard: [
+        [{ text: ADMIN_USER_BUTTON }],
+        [{ text: ADMIN_PAYMENTS_BUTTON }, { text: ADMIN_SUBSCRIPTIONS_BUTTON }],
+        [{ text: ADMIN_ACTIVITY_BUTTON }],
+        [{ text: ADMIN_BACK_BUTTON }],
+      ],
+      resize_keyboard: true,
+      one_time_keyboard: false,
+      is_persistent: true,
+      selective: true,
+    };
+  }
+
+  private getCommunicationMenuMarkup() {
+    return {
+      keyboard: [
+        [{ text: ADMIN_SUPPORT_BUTTON }],
+        [{ text: ADMIN_BROADCAST_BUTTON }],
+        [{ text: ADMIN_BACK_BUTTON }],
+      ],
+      resize_keyboard: true,
+      one_time_keyboard: false,
+      is_persistent: true,
+      selective: true,
     };
   }
 
@@ -1192,6 +1455,76 @@ export class AdminBotService {
       ].join('\n'),
       this.getMarathonBroadcastButtonTextKeyboardMarkup(),
     );
+  }
+
+  private async sendSingleUseInviteLink(
+    chatId: string | number,
+    productSlug: string,
+  ) {
+    const channelChatId = this.config.get<string>(MARATHON_CHANNEL_CHAT_ID);
+    if (!channelChatId) {
+      await this.telegram.sendMessage(
+        chatId,
+        `Не задан <code>${MARATHON_CHANNEL_CHAT_ID}</code>.`,
+      );
+      return;
+    }
+
+    try {
+      const invite = await this.inviteLinks.createSingleUseInviteLink({
+        chatId: channelChatId,
+        name: this.buildAdminInviteLinkName(productSlug),
+        expireInSeconds: this.getMarathonInviteExpiresInSeconds(),
+      });
+
+      await this.telegram.sendMessage(
+        chatId,
+        [
+          '✅ <b>Разовая инвайт-ссылка готова</b>',
+          '',
+          `Поток: ${this.escape(this.getMarathonFlowMenuTitle(productSlug))}`,
+          'Лимит: 1 вступление',
+          invite.expireDate
+            ? `Действует до: ${this.formatDate(new Date(invite.expireDate * 1000))}`
+            : 'Срок действия: без ограничения',
+          '',
+          `<code>${this.escape(invite.inviteLink)}</code>`,
+        ].join('\n'),
+        {
+          inline_keyboard: [
+            [
+              {
+                text: 'Открыть ссылку',
+                url: invite.inviteLink,
+              },
+            ],
+          ],
+        },
+      );
+    } catch (error) {
+      await this.telegram.sendMessage(
+        chatId,
+        [
+          'Не удалось создать инвайт-ссылку.',
+          '',
+          this.escape(error instanceof Error ? error.message : String(error)),
+        ].join('\n'),
+      );
+    }
+  }
+
+  private getMarathonInviteExpiresInSeconds(): number | undefined {
+    const raw = this.config.get<string>(MARATHON_INVITE_EXPIRES_IN_SECONDS);
+    if (!raw) {
+      return undefined;
+    }
+
+    const seconds = Number(raw);
+    return Number.isFinite(seconds) && seconds > 0 ? seconds : undefined;
+  }
+
+  private buildAdminInviteLinkName(productSlug: string) {
+    return `${productSlug}:admin:${Date.now()}`;
   }
 
   private async handleBroadcastStep(
@@ -1864,6 +2197,14 @@ export class AdminBotService {
     }
 
     return product.title;
+  }
+
+  private getMarathonFlowMenuTitle(productSlug: string) {
+    const match = productSlug.match(
+      new RegExp(`^${MARATHON_PRODUCT_SLUG_PREFIX}(\\d+)$`),
+    );
+
+    return match ? `Марафон №${match[1]}` : 'Марафон';
   }
 
   private getMarathonFlowNumber(product: Product) {

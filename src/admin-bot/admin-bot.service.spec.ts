@@ -2,6 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import { BotFlowService } from '../bot/bot-flow.service';
 import { TelegramUpdate } from '../bot/telegram.types';
+import { InviteLinksService } from '../invite-links/invite-links.service';
 import { PaymentAttempt } from '../payments/payment-attempt.entity';
 import { Product } from '../products/product.entity';
 import { TelegramApiService } from '../notifications/telegram-api.service';
@@ -77,10 +78,24 @@ function createService() {
       ],
     ]),
   } as unknown as jest.Mocked<BotFlowService>;
+  const inviteLinks = {
+    createSingleUseInviteLink: jest.fn().mockResolvedValue({
+      inviteLink: 'https://t.me/+singleUse',
+      memberLimit: 1,
+    }),
+  } as unknown as jest.Mocked<InviteLinksService>;
   const config = {
-    get: jest.fn((key: string, defaultValue?: string) =>
-      key === 'ADMIN_TELEGRAM_IDS' ? '123' : defaultValue,
-    ),
+    get: jest.fn((key: string, defaultValue?: string) => {
+      if (key === 'ADMIN_TELEGRAM_IDS') {
+        return '123';
+      }
+
+      if (key === 'MARATHON_CHANNEL_CHAT_ID') {
+        return '-1004456845123';
+      }
+
+      return defaultValue;
+    }),
   } as unknown as ConfigService;
   const users = {
     count: jest.fn().mockResolvedValue(1),
@@ -116,6 +131,7 @@ function createService() {
     adminTelegram,
     mainTelegram,
     flow,
+    inviteLinks,
     config,
     users,
     products,
@@ -133,10 +149,97 @@ function createService() {
     supportRequests,
     products,
     flow,
+    inviteLinks,
   };
 }
 
 describe('AdminBotService', () => {
+  it('shows grouped admin menu sections', async () => {
+    const { service, adminTelegram } = createService();
+
+    await service.handleUpdate(adminMessage('/menu'));
+
+    expect(adminTelegram.sendMessage).toHaveBeenCalledWith(
+      123,
+      expect.stringContaining('The Cycle Admin'),
+      expect.objectContaining({
+        keyboard: expect.arrayContaining([
+          [{ text: '🏁 Марафон' }],
+          [{ text: '👥 Пользователи' }],
+          [{ text: '💬 Коммуникации' }],
+        ]),
+        resize_keyboard: true,
+      }),
+    );
+  });
+
+  it('opens bottom marathon flow picker first', async () => {
+    const { service, adminTelegram } = createService();
+
+    await service.handleUpdate(adminMessage('🏁 Марафон'));
+
+    expect(adminTelegram.sendMessage).toHaveBeenCalledWith(
+      123,
+      expect.stringContaining('Марафон'),
+      {
+        keyboard: [[{ text: '🥑 Марафон №4' }], [{ text: '← Назад' }]],
+        resize_keyboard: true,
+        one_time_keyboard: false,
+        is_persistent: true,
+        selective: true,
+      },
+    );
+  });
+
+  it('opens selected marathon flow action menu', async () => {
+    const { service, adminTelegram } = createService();
+
+    await service.handleUpdate(adminMessage('🏁 Марафон'));
+    await service.handleUpdate(adminMessage('🥑 Марафон №4'));
+
+    expect(adminTelegram.sendMessage).toHaveBeenCalledWith(
+      123,
+      expect.stringContaining('Марафон №4'),
+      {
+        keyboard: [
+          [{ text: '📊 Статистика' }],
+          [{ text: '📣 Рассылка' }],
+          [{ text: '🔗 Получить разовую инвайт-ссылку' }],
+          [{ text: '← Назад' }],
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: false,
+        is_persistent: true,
+        selective: true,
+      },
+    );
+  });
+
+  it('generates a single-use invite link from selected marathon flow menu', async () => {
+    const { service, adminTelegram, inviteLinks } = createService();
+
+    await service.handleUpdate(adminMessage('🏁 Марафон'));
+    await service.handleUpdate(adminMessage('🥑 Марафон №4'));
+    await service.handleUpdate(
+      adminMessage('🔗 Получить разовую инвайт-ссылку'),
+    );
+
+    expect(inviteLinks.createSingleUseInviteLink).toHaveBeenCalledWith({
+      chatId: '-1004456845123',
+      name: expect.stringMatching(/^marathon-4:admin:\d+$/),
+      expireInSeconds: undefined,
+    });
+    expect(adminTelegram.sendMessage).toHaveBeenCalledWith(
+      123,
+      expect.stringContaining('Разовая инвайт-ссылка готова'),
+      {
+        inline_keyboard: [
+          [{ text: 'Открыть ссылку', url: 'https://t.me/+singleUse' }],
+        ],
+      },
+    );
+  });
+
   it('collects a broadcast URL button before confirmation', async () => {
     const { service, adminTelegram } = createService();
     const privateService = service as unknown as AdminBotServicePrivate;

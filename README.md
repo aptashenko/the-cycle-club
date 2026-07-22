@@ -65,12 +65,20 @@ APP_URL=http://localhost:3000
 ADMIN_TELEGRAM_ID=your_telegram_id
 ADMIN_TELEGRAM_BOT_TOKEN=your_admin_bot_token
 MANAGER_TELEGRAM_ID=your_telegram_id
+MARATHON_CHANNEL_CHAT_ID=
+MARATHON_INVITE_EXPIRES_IN_SECONDS=
 PORT=3000
 ```
 
 `TELEGRAM_BOT_USERNAME` must match the bot from `TELEGRAM_BOT_TOKEN`.
 It is used for Telegram attribution links such as
 `/telegram/redirect?utm_source=google&utm_campaign=local_test`.
+
+For marathon access links, add the main bot as an admin to the marathon channel
+or chat with invite-user permissions, then set `MARATHON_CHANNEL_CHAT_ID`.
+`MARATHON_INVITE_EXPIRES_IN_SECONDS` is optional; when set, generated invite
+links expire after that many seconds. Each generated marathon invite link is
+limited to one join.
 
 WayForPay variables can stay empty in `PAYMENT_MODE=mock`:
 

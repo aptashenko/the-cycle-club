@@ -5,7 +5,7 @@ import { extname } from 'path';
 import { TelegramUpdate } from '../bot/telegram.types';
 
 type TelegramMarkup = Record<string, unknown>;
-type TelegramResponse<T> = {
+export type TelegramResponse<T> = {
   ok: boolean;
   result?: T;
   description?: string;
@@ -13,6 +13,18 @@ type TelegramResponse<T> = {
 type TelegramPhotoFile = {
   path: string;
   filename: string;
+};
+export type CreateChatInviteLinkInput = {
+  chatId: string | number;
+  name?: string;
+  expireDate?: number;
+  memberLimit?: number;
+};
+export type TelegramChatInviteLink = {
+  invite_link: string;
+  name?: string;
+  expire_date?: number;
+  member_limit?: number;
 };
 
 @Injectable()
@@ -132,6 +144,15 @@ export class TelegramApiService {
     });
 
     return banResponse;
+  }
+
+  async createChatInviteLink(input: CreateChatInviteLinkInput) {
+    return this.request<TelegramChatInviteLink>('createChatInviteLink', {
+      chat_id: input.chatId,
+      name: input.name,
+      expire_date: input.expireDate,
+      member_limit: input.memberLimit,
+    });
   }
 
   async getUpdates(offset?: number): Promise<TelegramUpdate[]> {
