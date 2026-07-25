@@ -58,7 +58,7 @@ if [[ "$REMOTE_TARGET" != *@* ]]; then
 fi
 
 if [[ -n "$BRANCH" ]]; then
-  ssh "$REMOTE_TARGET" "cd ~/the-cycle-club && git fetch origin '$BRANCH' && git checkout '$BRANCH' && git pull --ff-only origin '$BRANCH' && npm run deploy"
+  ssh "$REMOTE_TARGET" "cd ~/the-cycle-club && git fetch origin '$BRANCH' && git checkout '$BRANCH' && git pull --ff-only origin '$BRANCH' && npm install && npm run deploy"
 else
-  ssh "$REMOTE_TARGET" "cd ~/the-cycle-club && git pull && npm run deploy"
+  ssh "$REMOTE_TARGET" "cd ~/the-cycle-club && git pull && npm install && npm run deploy"
 fi
