@@ -11,7 +11,7 @@ export class UserService {
     private readonly userRepository: Repository<User>,
   ) {}
 
-  async getUsersWithExportData() {
+  async findUsersByProduct(slug?: string) {
     const users = await this.userRepository
         .createQueryBuilder('client')
         .leftJoinAndSelect('client.subscriptions', 'subscriptions')
@@ -33,34 +33,34 @@ export class UserService {
           'utm.utmCampaign',
         ])
         .getMany();
+    let filteredUsers = users;
+    if (slug) {
+      filteredUsers = users
+          .filter(user => user.subscriptions
+          .some(sub => sub.product?.slug === slug))
+    }
+    return filteredUsers.map(({ firstName, lastName, subscriptions, telegramAttributions, supportRequests, languageCode, id, telegramId, updatedAt, ...user }) => ({
+          id: telegramId,
+          name: `${firstName} ${lastName}`.trim(),
+          ...user,
+          supportRequests: supportRequests.filter(item => item.status === 'open'),
+          subscription: subscriptions.find(sub => sub.product?.slug === slug),
+          utm: {
+            sources: telegramAttributions.map(item => item.utmSource).join(','),
+            campaigns: telegramAttributions.map(item => item.utmCampaign).join(',')
+          }
+        }));
+  }
+
+  async getUsersWithExportData() {
+
     const THE_CYCLE_SLUG = 'the-cycle';
-    const theCycleMembersOnly = users
-        .filter(user => user.subscriptions
-            .some(sub => sub.product?.slug === THE_CYCLE_SLUG));
-    const theCycleMembers = theCycleMembersOnly
-        .map(({ firstName, lastName, subscriptions, telegramAttributions, supportRequests, languageCode, id, telegramId, updatedAt, ...user }) => ({
-      id: telegramId,
-      name: `${firstName} ${lastName}`.trim(),
-      ...user,
-      supportRequests: supportRequests.filter(item => item.status === 'open'),
-      subscription: subscriptions.find(sub => sub.product?.slug === THE_CYCLE_SLUG),
-      utm: {
-        sources: telegramAttributions.map(item => item.utmSource).join(','),
-        campaigns: telegramAttributions.map(item => item.utmCampaign).join(',')
-      }
-    }));
-    const allMembers = users.map(({ firstName, lastName, subscriptions, telegramAttributions, supportRequests, languageCode, id, telegramId, updatedAt, ...user }) => ({
-      id: telegramId,
-      name: `${firstName} ${lastName}`.trim(),
-      ...user,
-      supportRequests: supportRequests.filter(item => item.status === 'open'),
-      subscription: subscriptions.find(sub => sub.product?.slug === THE_CYCLE_SLUG),
-      utm: {
-        sources: telegramAttributions.map(item => item.utmSource).join(','),
-        campaigns: telegramAttributions.map(item => item.utmCampaign).join(',')
-      }
-    }))
-    return {theCycleMembers, allMembers};
+    const MARAPHON_4_SLUG = 'marathon-4';
+    const theCycleMembers = await this.findUsersByProduct(THE_CYCLE_SLUG);
+    const maraphonUsers = await this.findUsersByProduct(MARAPHON_4_SLUG);
+    const allMembers  = await this.findUsersByProduct()
+
+    return {theCycleMembers, allMembers, maraphonUsers};
   }
 
   async upsertTelegramUser(from: TelegramUser): Promise<User> {

@@ -22,13 +22,29 @@ export class GoogleSheetsService {
     }
 
     async syncTable() {
-        const {theCycleMembers, allMembers} = await this.userService.getUsersWithExportData();
+        const {theCycleMembers, allMembers, maraphonUsers} = await this.userService.getUsersWithExportData();
         const cycleRows = theCycleMembers.map(user => {
             return [
                 user.id,
                 user.username || '',
                 user.name || '',
                 user.membershipStatus === 'active' ? 'yes' : 'no', 
+                user.utm.sources || '-',
+                user.utm.campaigns || '-',
+                user.supportRequests.length || 0,
+                this.formatDate(user.createdAt),
+                this.formatDate(user.subscription?.startsAt),
+                this.formatDate(user.subscription?.expiresAt)
+
+            ]
+        })
+
+        const maraphon4Rows = maraphonUsers.map(user => {
+            return [
+                user.id,
+                user.username || '',
+                user.name || '',
+                user.membershipStatus === 'active' ? 'yes' : 'no',
                 user.utm.sources || '-',
                 user.utm.campaigns || '-',
                 user.supportRequests.length || 0,
@@ -51,7 +67,7 @@ export class GoogleSheetsService {
 
         await this.httpService.axiosRef.post(
             this.googleSheetsWebhookUrl,
-            {theCycle: cycleRows, all: allRows}
+            {theCycle: cycleRows, all: allRows, maraphon4: maraphon4Rows}
         )
         return {theCycle: cycleRows, all: allRows}
     }
