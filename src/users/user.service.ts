@@ -14,40 +14,20 @@ export class UserService {
   async findUsersByPayment(productId: string) {
     const users = await this.userRepository
         .createQueryBuilder('client')
-        .leftJoinAndSelect('client.subscriptions', 'subscriptions')
+        .innerJoinAndSelect('client.paymentAttempts', 'payments')
         .leftJoinAndSelect('client.telegramAttributions', 'utm')
         .leftJoinAndSelect('client.supportRequests', 'supportRequests')
-        .leftJoinAndSelect('subscriptions.product', 'product')
-        .leftJoinAndSelect('client.paymentAttempts', 'payments')
-        .select('client')
-        .addSelect([
-          'payments.id',
-          'payments.productId',
-          'payments.amount',
-          'payments.currency',
-          'payments.createdAt',
-          'product',
-          'subscriptions.id',
-          'subscriptions.productId',
-          'subscriptions.status',
-          'subscriptions.startsAt',
-          'subscriptions.expiresAt',
-          'supportRequests.id',
-          'supportRequests.topic',
-          'supportRequests.status',
-          'utm.utmSource',
-          'utm.utmCampaign',
-        ])
+        .where('payments.productId = :productId', { productId })
         .getMany();
 
-    return users
-        .filter(user => user.paymentAttempts
-            .some(payment => payment.productId === productId)).map(({ firstName, lastName, subscriptions, telegramAttributions, supportRequests, languageCode, id, telegramId, updatedAt, ...user }) => ({
+    return users.map(({ firstName, lastName, subscriptions, telegramAttributions, supportRequests, languageCode, id, telegramId, updatedAt, ...user }) => ({
       id: telegramId,
       name: `${firstName} ${lastName}`.trim(),
       ...user,
       supportRequests: supportRequests.filter(item => item.status === 'open'),
-      paymentAttempts: user.paymentAttempts.filter(payment => payment.productId === productId),
+      paymentAttempts: user.paymentAttempts
+          .filter(payment => payment.productId === productId)
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
       utm: {
         sources: telegramAttributions.map(item => item.utmSource).join(','),
         campaigns: telegramAttributions.map(item => item.utmCampaign).join(',')

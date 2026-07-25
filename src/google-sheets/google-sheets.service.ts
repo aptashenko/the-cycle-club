@@ -40,6 +40,8 @@ export class GoogleSheetsService {
         })
 
         const maraphon4Rows = maraphonUsers.map(user => {
+            const lastPayment = user.paymentAttempts[0];
+
             return [
                 user.id,
                 user.username || '',
@@ -49,8 +51,9 @@ export class GoogleSheetsService {
                 user.utm.campaigns || '-',
                 user.supportRequests.length || 0,
                 this.formatDate(user.createdAt),
-                this.formatDate(user.paymentAttempts[0].createdAt),
-                `${user.paymentAttempts[0].amount} ${user.paymentAttempts[0].currency}`
+                lastPayment.status,
+                this.formatDate(lastPayment.createdAt),
+                `${lastPayment.amount} ${lastPayment.currency}`
             ]
         })
 
