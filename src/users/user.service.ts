@@ -18,21 +18,28 @@ export class UserService {
         .leftJoinAndSelect('client.telegramAttributions', 'utm')
         .leftJoinAndSelect('client.supportRequests', 'supportRequests')
         .where('payments.productId = :productId', { productId })
+        .orderBy('payments.createdAt', 'DESC')
         .getMany();
 
-    return users.map(({ firstName, lastName, subscriptions, telegramAttributions, supportRequests, languageCode, id, telegramId, updatedAt, ...user }) => ({
-      id: telegramId,
-      name: `${firstName} ${lastName}`.trim(),
-      ...user,
-      supportRequests: supportRequests.filter(item => item.status === 'open'),
-      paymentAttempts: user.paymentAttempts
+    return users.map(({ firstName, lastName, subscriptions, telegramAttributions, supportRequests, languageCode, id, telegramId, updatedAt, ...user }) => {
+      const paymentAttempts = user.paymentAttempts
           .filter(payment => payment.productId === productId)
-          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
-      utm: {
-        sources: telegramAttributions.map(item => item.utmSource).join(','),
-        campaigns: telegramAttributions.map(item => item.utmCampaign).join(',')
-      }
-    }));
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+      return {
+        id: telegramId,
+        name: `${firstName} ${lastName}`.trim(),
+        ...user,
+        supportRequests: supportRequests.filter(item => item.status === 'open'),
+        paymentAttempts,
+        utm: {
+          sources: telegramAttributions.map(item => item.utmSource).join(','),
+          campaigns: telegramAttributions.map(item => item.utmCampaign).join(',')
+        }
+      };
+    }).sort((a, b) =>
+        b.paymentAttempts[0].createdAt.getTime() - a.paymentAttempts[0].createdAt.getTime(),
+    );
   }
 
   async findUsersByProduct(slug?: string) {
@@ -56,6 +63,7 @@ export class UserService {
           'utm.utmSource',
           'utm.utmCampaign',
         ])
+        .orderBy('subscriptions.expiresAt', 'ASC')
         .getMany();
     let filteredUsers = users;
     if (slug) {
@@ -63,17 +71,27 @@ export class UserService {
           .filter(user => user.subscriptions
           .some(sub => sub.product?.slug === slug))
     }
-    return filteredUsers.map(({ firstName, lastName, subscriptions, telegramAttributions, supportRequests, languageCode, id, telegramId, updatedAt, ...user }) => ({
-          id: telegramId,
-          name: `${firstName} ${lastName}`.trim(),
-          ...user,
-          supportRequests: supportRequests.filter(item => item.status === 'open'),
-          subscription: subscriptions.find(sub => sub.product?.slug === slug),
-          utm: {
-            sources: telegramAttributions.map(item => item.utmSource).join(','),
-            campaigns: telegramAttributions.map(item => item.utmCampaign).join(',')
-          }
-        }));
+    return filteredUsers.map(({ firstName, lastName, subscriptions, telegramAttributions, supportRequests, languageCode, id, telegramId, updatedAt, ...user }) => {
+          const productSubscriptions = subscriptions
+              .filter(sub => !slug || sub.product?.slug === slug)
+              .sort((a, b) =>
+                  (b.expiresAt?.getTime() ?? 0) - (a.expiresAt?.getTime() ?? 0),
+              );
+
+          return {
+            id: telegramId,
+            name: `${firstName} ${lastName}`.trim(),
+            ...user,
+            supportRequests: supportRequests.filter(item => item.status === 'open'),
+            subscription: productSubscriptions[0],
+            utm: {
+              sources: telegramAttributions.map(item => item.utmSource).join(','),
+              campaigns: telegramAttributions.map(item => item.utmCampaign).join(',')
+            }
+          };
+        }).sort((a, b) =>
+            (b.subscription?.expiresAt?.getTime() ?? 0) - (a.subscription?.expiresAt?.getTime() ?? 0),
+        );
   }
 
   async getUsersWithExportData() {
