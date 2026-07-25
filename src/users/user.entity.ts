@@ -9,6 +9,7 @@ import {
 import { PaymentAttempt } from '../payments/payment-attempt.entity';
 import { Subscription } from '../subscriptions/subscription.entity';
 import { SupportRequest } from '../support/support-request.entity';
+import { TelegramAttribution } from "../attribution/telegram-attribution.entity";
 
 @Entity('users')
 export class User {
@@ -41,6 +42,9 @@ export class User {
 
   @OneToMany(() => SupportRequest, (supportRequest) => supportRequest.user)
   supportRequests: SupportRequest[];
+
+  @OneToMany(() => TelegramAttribution, (telegramAttribution) => telegramAttribution.user)
+  telegramAttributions: TelegramAttribution[];
 
   @CreateDateColumn()
   createdAt: Date;

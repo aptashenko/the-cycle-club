@@ -15,6 +15,7 @@ import { SupportModule } from './support/support.module';
 import { UsersModule } from './users/users.module';
 import { buildDataSourceOptions } from './database/typeorm.config';
 import { FilesController } from './files/files.controller';
+import { GoogleSheetsModule } from './google-sheets/google-sheets.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { FilesController } from './files/files.controller';
     AdminBotModule,
     MigrationBotModule,
     SchedulerModule,
+    GoogleSheetsModule,
   ],
   controllers: [FilesController],
 })

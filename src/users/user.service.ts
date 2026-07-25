@@ -11,6 +11,58 @@ export class UserService {
     private readonly userRepository: Repository<User>,
   ) {}
 
+  async getUsersWithExportData() {
+    const users = await this.userRepository
+        .createQueryBuilder('client')
+        .leftJoinAndSelect('client.subscriptions', 'subscriptions')
+        .leftJoinAndSelect('client.telegramAttributions', 'utm')
+        .leftJoinAndSelect('client.supportRequests', 'supportRequests')
+        .leftJoinAndSelect('subscriptions.product', 'product')
+        .select('client')
+        .addSelect([
+          'product',
+          'subscriptions.id',
+          'subscriptions.productId',
+          'subscriptions.status',
+          'subscriptions.startsAt',
+          'subscriptions.expiresAt',
+          'supportRequests.id',
+          'supportRequests.topic',
+          'supportRequests.status',
+          'utm.utmSource',
+          'utm.utmCampaign',
+        ])
+        .getMany();
+    const THE_CYCLE_SLUG = 'the-cycle';
+    const theCycleMembersOnly = users
+        .filter(user => user.subscriptions
+            .some(sub => sub.product?.slug === THE_CYCLE_SLUG));
+    const theCycleMembers = theCycleMembersOnly
+        .map(({ firstName, lastName, subscriptions, telegramAttributions, supportRequests, languageCode, id, telegramId, updatedAt, ...user }) => ({
+      id: telegramId,
+      name: `${firstName} ${lastName}`.trim(),
+      ...user,
+      supportRequests: supportRequests.filter(item => item.status === 'open'),
+      subscription: subscriptions.find(sub => sub.product?.slug === THE_CYCLE_SLUG),
+      utm: {
+        sources: telegramAttributions.map(item => item.utmSource).join(','),
+        campaigns: telegramAttributions.map(item => item.utmCampaign).join(',')
+      }
+    }));
+    const allMembers = users.map(({ firstName, lastName, subscriptions, telegramAttributions, supportRequests, languageCode, id, telegramId, updatedAt, ...user }) => ({
+      id: telegramId,
+      name: `${firstName} ${lastName}`.trim(),
+      ...user,
+      supportRequests: supportRequests.filter(item => item.status === 'open'),
+      subscription: subscriptions.find(sub => sub.product?.slug === THE_CYCLE_SLUG),
+      utm: {
+        sources: telegramAttributions.map(item => item.utmSource).join(','),
+        campaigns: telegramAttributions.map(item => item.utmCampaign).join(',')
+      }
+    }))
+    return {theCycleMembers, allMembers};
+  }
+
   async upsertTelegramUser(from: TelegramUser): Promise<User> {
     const telegramId = String(from.id);
     let user = await this.userRepository.findOne({ where: { telegramId } });
