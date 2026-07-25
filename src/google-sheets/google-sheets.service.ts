@@ -49,9 +49,8 @@ export class GoogleSheetsService {
                 user.utm.campaigns || '-',
                 user.supportRequests.length || 0,
                 this.formatDate(user.createdAt),
-                this.formatDate(user.subscription?.startsAt),
-                this.formatDate(user.subscription?.expiresAt)
-
+                this.formatDate(user.paymentAttempts[0].createdAt),
+                `${user.paymentAttempts[0].amount} ${user.paymentAttempts[0].currency}`
             ]
         })
 
