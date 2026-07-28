@@ -9,7 +9,7 @@
       "buttons": [
         [
           {
-            "text": "🎙 Запись на бесплатный прямой эфир",
+            "text": "🎙 Запись на прямой эфир",
             "target": "webinar1"
           }
         ],
@@ -41,14 +41,14 @@
     },
     "webinar1": {
       "text": [
-        "🎙 <b>Бесплатный прямой эфир 05 августа</b>",
+        "🎙 <b>Прямой эфир 05 августа</b>",
         "",
         "Нажмите кнопку ниже, чтобы записаться и получить ссылку на эфир в Telegram."
       ],
       "buttons": [
         [
           {
-            "text": "Записаться на бесплатный эфир",
+            "text": "Записаться на эфир",
             "action": "registerLiveEvent",
             "eventSlug": "webinar1"
           }
@@ -305,7 +305,7 @@
   },
   "liveEvents": {
     "webinar1": {
-      "title": "Бесплатный прямой эфир",
+      "title": "Прямой эфир",
       "telegramUrl": "https://t.me/+S2XB1Sq_collZjRi",
       "joinButtonText": "Перейти в Telegram",
       "successMessage": [
