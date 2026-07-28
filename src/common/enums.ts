@@ -27,3 +27,8 @@ export enum SupportRequestStatus {
   InProgress = 'in_progress',
   Resolved = 'resolved',
 }
+
+export enum LiveEventRegistrationStatus {
+  Registered = 'registered',
+  Cancelled = 'cancelled',
+}

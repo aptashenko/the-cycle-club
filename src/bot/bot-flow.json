@@ -9,6 +9,12 @@
       "buttons": [
         [
           {
+            "text": "🎙 Бесплатный прямой эфир",
+            "target": "webinar1"
+          }
+        ],
+        [
+          {
             "text": "\uD83C\uDF38 Клуб The Cycle",
             "target": "the-cycle"
           }
@@ -29,6 +35,24 @@
           {
             "text": "\uD83D\uDECE\uFE0F Запись на консультацию",
             "target": "consultation"
+          }
+        ]
+      ]
+    },
+    "webinar1": {
+      "text": [
+        "🎙 <b>Бесплатный прямой эфир</b>",
+        "",
+        "Разберем, как мягко поддерживать здоровье, гормональный баланс и энергию через питание и образ жизни.",
+        "",
+        "Нажмите кнопку ниже, чтобы записаться и получить ссылку на эфир в Telegram."
+      ],
+      "buttons": [
+        [
+          {
+            "text": "Записаться на бесплатный эфир",
+            "action": "registerLiveEvent",
+            "eventSlug": "webinar1"
           }
         ]
       ]
@@ -280,6 +304,23 @@
         "requiresMessage": true
       }
     ]
+  },
+  "liveEvents": {
+    "webinar1": {
+      "title": "Бесплатный прямой эфир",
+      "telegramUrl": "https://telegram.me/assistant_nicolaeva",
+      "joinButtonText": "Перейти в Telegram",
+      "successMessage": [
+        "✅ Вы записаны на {{eventTitle}}.",
+        "",
+        "Ссылка на эфир в Telegram доступна по кнопке ниже."
+      ],
+      "alreadyRegisteredMessage": [
+        "✅ Вы уже записаны на {{eventTitle}}.",
+        "",
+        "Ссылка на эфир в Telegram доступна по кнопке ниже."
+      ]
+    }
   },
   "payment": {
     "activeIntro": [

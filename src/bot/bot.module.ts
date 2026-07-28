@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AttributionModule } from '../attribution/attribution.module';
+import { LiveEventsModule } from '../live-events/live-events.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { ProductsModule } from '../products/products.module';
@@ -20,6 +21,7 @@ import { BotService } from './bot.service';
     SubscriptionsModule,
     PaymentsModule,
     SupportModule,
+    LiveEventsModule,
     UserActivityModule,
     AttributionModule,
   ],

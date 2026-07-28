@@ -9,7 +9,8 @@ import {
 import { PaymentAttempt } from '../payments/payment-attempt.entity';
 import { Subscription } from '../subscriptions/subscription.entity';
 import { SupportRequest } from '../support/support-request.entity';
-import { TelegramAttribution } from "../attribution/telegram-attribution.entity";
+import { TelegramAttribution } from '../attribution/telegram-attribution.entity';
+import { LiveEventRegistration } from '../live-events/live-event-registration.entity';
 
 @Entity('users')
 export class User {
@@ -43,8 +44,14 @@ export class User {
   @OneToMany(() => SupportRequest, (supportRequest) => supportRequest.user)
   supportRequests: SupportRequest[];
 
-  @OneToMany(() => TelegramAttribution, (telegramAttribution) => telegramAttribution.user)
+  @OneToMany(
+    () => TelegramAttribution,
+    (telegramAttribution) => telegramAttribution.user,
+  )
   telegramAttributions: TelegramAttribution[];
+
+  @OneToMany(() => LiveEventRegistration, (registration) => registration.user)
+  liveEventRegistrations: LiveEventRegistration[];
 
   @CreateDateColumn()
   createdAt: Date;

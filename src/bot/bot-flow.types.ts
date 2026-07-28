@@ -8,8 +8,9 @@ export type FlowButton = {
   activeText?: string;
   target?: string;
   url?: string;
-  action?: 'startPayment' | 'openSupport';
+  action?: 'startPayment' | 'openSupport' | 'registerLiveEvent';
   productSlug?: string;
+  eventSlug?: string;
   visible?: FlowButtonVisibility;
 };
 
@@ -41,6 +42,14 @@ export type SupportConfig = {
   topics: SupportTopicConfig[];
 };
 
+export type LiveEventConfig = {
+  title: string;
+  telegramUrl: string;
+  joinButtonText: string;
+  successMessage: string[];
+  alreadyRegisteredMessage: string[];
+};
+
 export type PaymentConfig = {
   activeIntro: string[];
   inactiveIntro: string[];
@@ -68,6 +77,7 @@ export type BotFlowConfig = {
   screens: Record<string, FlowScreen>;
   replyKeyboard: ReplyKeyboardConfig;
   support: SupportConfig;
+  liveEvents: Record<string, LiveEventConfig>;
   payment: PaymentConfig;
   subscriptions: SubscriptionsConfig;
 };

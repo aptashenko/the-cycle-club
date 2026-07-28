@@ -3,6 +3,7 @@ import { existsSync } from 'fs';
 import { basename, join } from 'path';
 import { AttributionService } from '../attribution/attribution.service';
 import { PaymentProvider, ProductType } from '../common/enums';
+import { LiveEventsService } from '../live-events/live-events.service';
 import { NotificationService } from '../notifications/notification.service';
 import { PaymentService } from '../payments/payment.service';
 import { Product } from '../products/product.entity';
@@ -43,6 +44,7 @@ export class BotService {
     private readonly payments: PaymentService,
     private readonly notifications: NotificationService,
     private readonly support: SupportService,
+    private readonly liveEvents: LiveEventsService,
     private readonly activity: UserActivityService,
     private readonly attribution: AttributionService,
     private readonly flow: BotFlowService,
@@ -185,6 +187,13 @@ export class BotService {
     if (paymentProductSlug) {
       this.pendingSupportMessages.delete(user.id);
       await this.startProductPayment(chatId, user, paymentProductSlug);
+      return;
+    }
+
+    const liveEventSlug = this.flow.getLiveEventSlugFromCallback(data);
+    if (liveEventSlug) {
+      this.pendingSupportMessages.delete(user.id);
+      await this.registerLiveEvent(chatId, user, liveEventSlug);
       return;
     }
 
@@ -442,6 +451,35 @@ export class BotService {
       chatId,
       this.flow.getReplyKeyboardMessage(),
       this.flow.buildReplyKeyboard(),
+    );
+  }
+
+  private async registerLiveEvent(
+    chatId: string | number,
+    user: User,
+    eventSlug: string,
+  ) {
+    const { registration, created } = await this.liveEvents.register(
+      user,
+      eventSlug,
+    );
+
+    await this.activity.track(
+      user,
+      'live_event',
+      created ? 'live_event_registered' : 'live_event_already_registered',
+      {
+        registrationId: registration.id,
+        eventSlug,
+      },
+    );
+
+    await this.telegram.sendMessage(
+      chatId,
+      this.flow.getLiveEventRegistrationMessage(eventSlug, created),
+      {
+        inline_keyboard: this.flow.buildLiveEventLinkInlineKeyboard(eventSlug),
+      },
     );
   }
 

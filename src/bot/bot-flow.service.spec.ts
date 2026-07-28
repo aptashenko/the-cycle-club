@@ -21,6 +21,26 @@ describe('BotFlowService', () => {
     expect(keyboard?.[1]?.[0]?.callback_data).toBe('flow:the-cycle-inside');
   });
 
+  it('builds callbacks and link keyboard for live event registration', () => {
+    const keyboard = service.buildScreenInlineKeyboard('webinar1');
+
+    expect(keyboard?.[0]?.[0]).toEqual({
+      text: 'Записаться на бесплатный эфир',
+      callback_data: 'live-event:register:webinar1',
+    });
+    expect(
+      service.getLiveEventSlugFromCallback('live-event:register:webinar1'),
+    ).toBe('webinar1');
+    expect(service.buildLiveEventLinkInlineKeyboard('webinar1')).toEqual([
+      [
+        {
+          text: 'Перейти в Telegram',
+          url: 'https://telegram.me/assistant_nicolaeva',
+        },
+      ],
+    ]);
+  });
+
   it('uses active subscription button text when provided', () => {
     const keyboard = service.buildScreenInlineKeyboard('the-cycle', {
       hasActiveSubscription: true,
