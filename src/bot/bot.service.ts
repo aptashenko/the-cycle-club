@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { existsSync } from 'fs';
 import { basename, join } from 'path';
 import { AttributionService } from '../attribution/attribution.service';
@@ -34,6 +34,7 @@ const LEGACY_CALLBACKS = {
 
 @Injectable()
 export class BotService {
+  private readonly logger = new Logger(BotService.name);
   private readonly pendingSupportMessages = new Map<string, string>();
 
   constructor(
@@ -62,6 +63,10 @@ export class BotService {
   }
 
   private async handleMessage(message: TelegramMessage) {
+    this.logger.log(
+      `Telegram message chat id=${message.chat.id}, type=${message.chat.type}, title=${message.chat.title ?? ''}`,
+    );
+
     if (!message.from || !message.text) {
       return;
     }
