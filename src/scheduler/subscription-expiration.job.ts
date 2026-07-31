@@ -59,8 +59,16 @@ export class SubscriptionExpirationJob implements OnApplicationBootstrap {
         subscription.user.telegramId,
       );
 
-      if (response.ok || this.isAlreadyOutsideGroup(response.description)) {
+      const wasAlreadyOutsideGroup = this.isAlreadyOutsideGroup(
+        response.description,
+      );
+
+      if (response.ok || wasAlreadyOutsideGroup) {
         await this.subscriptions.markExpired(subscription);
+        await this.notifications.notifyUserRemovedFromClosedGroup(
+          subscription,
+          wasAlreadyOutsideGroup,
+        );
         await this.notifications.notifySubscriptionExpired(subscription);
         expired += 1;
         continue;

@@ -4,6 +4,7 @@ import { PaymentProvider, ProductType } from '../common/enums';
 import { InviteLinksService } from '../invite-links/invite-links.service';
 import { PaymentAttempt } from '../payments/payment-attempt.entity';
 import { Product } from '../products/product.entity';
+import { Subscription } from '../subscriptions/subscription.entity';
 import { SupportRequest } from '../support/support-request.entity';
 import { User } from '../users/user.entity';
 import { UserService } from '../users/user.service';
@@ -124,6 +125,60 @@ describe('NotificationService', () => {
       expect.objectContaining({
         inline_keyboard: expect.any(Array),
       }),
+    );
+  });
+
+  it('sends admin alert when a user is removed from the closed group', async () => {
+    const config = {
+      get: jest.fn((key: string, defaultValue?: string) =>
+        key === 'ADMIN_TELEGRAM_ID' ? 'admin-chat-id' : defaultValue,
+      ),
+    } as unknown as ConfigService;
+    const telegram = {
+      sendMessage: jest.fn().mockResolvedValue(undefined),
+      isBotBlockedByUser: jest.fn(() => false),
+    } as unknown as TelegramApiService;
+    const adminTelegram = {
+      sendMessage: jest.fn().mockResolvedValue(undefined),
+    } as unknown as AdminTelegramApiService;
+    const flow = {} as BotFlowService;
+    const inviteLinks = {
+      createSingleUseInviteLink: jest.fn(),
+    } as unknown as jest.Mocked<InviteLinksService>;
+    const users = {
+      markBotBlocked: jest.fn(),
+    } as unknown as jest.Mocked<UserService>;
+    const service = new NotificationService(
+      config,
+      telegram,
+      adminTelegram,
+      flow,
+      inviteLinks,
+      users,
+    );
+
+    await service.notifyUserRemovedFromClosedGroup({
+      expiresAt: new Date('2026-07-01T12:00:00.000Z'),
+      product: {
+        title: 'The Cycle',
+      } as Product,
+      user: {
+        firstName: 'Jane',
+        lastName: 'Doe',
+        telegramId: 'user-chat-id',
+        username: 'jane',
+      } as User,
+    } as Subscription);
+
+    expect(adminTelegram.sendMessage).toHaveBeenCalledWith(
+      'admin-chat-id',
+      expect.stringContaining('Пользователь удален из закрытой группы'),
+      undefined,
+    );
+    expect(adminTelegram.sendMessage).toHaveBeenCalledWith(
+      'admin-chat-id',
+      expect.stringContaining('user-chat-id'),
+      undefined,
     );
   });
 

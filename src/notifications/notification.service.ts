@@ -172,6 +172,34 @@ export class NotificationService {
     );
   }
 
+  async notifyUserRemovedFromClosedGroup(
+    subscription: Subscription,
+    wasAlreadyOutsideGroup = false,
+  ) {
+    await this.sendAdminMessage(
+      [
+        wasAlreadyOutsideGroup
+          ? 'ℹ️ <b>Пользователь уже вне закрытой группы</b>'
+          : '🚪 <b>Пользователь удален из закрытой группы</b>',
+        '',
+        '<b>Пользователь:</b>',
+        this.escape(this.formatUser(subscription.user)),
+        '',
+        '<b>ID:</b>',
+        this.escape(subscription.user.telegramId),
+        '',
+        '<b>Продукт:</b>',
+        this.escape(subscription.product.title),
+        '',
+        '<b>Подписка закончилась:</b>',
+        this.escape(this.formatSubscriptionDate(subscription)),
+        '',
+        '<b>Дата обработки:</b>',
+        new Date().toISOString(),
+      ].join('\n'),
+    );
+  }
+
   private async sendAdminMessage(
     text: string,
     includeManager = false,
