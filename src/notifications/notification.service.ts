@@ -9,6 +9,7 @@ import { Product } from '../products/product.entity';
 import { Subscription } from '../subscriptions/subscription.entity';
 import { SupportRequest } from '../support/support-request.entity';
 import { User } from '../users/user.entity';
+import { UserService } from '../users/user.service';
 import { TelegramApiService } from './telegram-api.service';
 
 const RESOLVE_SUPPORT_PREFIX = 'support:resolve:';
@@ -26,6 +27,7 @@ export class NotificationService {
     private readonly adminTelegram: AdminTelegramApiService,
     private readonly flow: BotFlowService,
     private readonly inviteLinks: InviteLinksService,
+    private readonly users: UserService,
   ) {}
 
   async notifyPaymentSuccess(
@@ -35,8 +37,8 @@ export class NotificationService {
     const isSubscriptionProduct =
       paymentAttempt.product.type === ProductType.Subscription;
 
-    await this.telegram.sendMessage(
-      paymentAttempt.user.telegramId,
+    await this.sendUserMessage(
+      paymentAttempt.user,
       this.flow.getPaymentSuccessMessage(
         {
           productTitle: paymentAttempt.product.title,
@@ -122,8 +124,8 @@ export class NotificationService {
         })
       : '-';
 
-    await this.telegram.sendMessage(
-      subscription.user.telegramId,
+    await this.sendUserMessage(
+      subscription.user,
       [
         '⏰ <b>Доступ скоро закончится</b>',
         '',
@@ -148,8 +150,8 @@ export class NotificationService {
   }
 
   async notifySubscriptionExpired(subscription: Subscription) {
-    await this.telegram.sendMessage(
-      subscription.user.telegramId,
+    await this.sendUserMessage(
+      subscription.user,
       [
         '🔒 <b>Доступ к группе закрыт</b>',
         '',
@@ -221,8 +223,8 @@ export class NotificationService {
         expireInSeconds: this.getMarathonInviteExpiresInSeconds(),
       });
 
-      await this.telegram.sendMessage(
-        paymentAttempt.user.telegramId,
+      await this.sendUserMessage(
+        paymentAttempt.user,
         [
           'Доступ к каналу марафона готов ✅',
           '',
@@ -279,8 +281,8 @@ export class NotificationService {
       return;
     }
 
-    await this.telegram.sendMessage(
-      user.telegramId,
+    await this.sendUserMessage(
+      user,
       this.flow.getDownloadMessage({
         productTitle: product.title,
       }),
@@ -306,6 +308,25 @@ export class NotificationService {
     const path = url.startsWith('/') ? url : `/${url}`;
 
     return `${appUrl}${path}`;
+  }
+
+  private async sendUserMessage(
+    user: User,
+    text: string,
+    replyMarkup?: Record<string, unknown>,
+  ) {
+    const response = await this.telegram.sendMessage(
+      user.telegramId,
+      text,
+      replyMarkup,
+    );
+
+    if (this.telegram.isBotBlockedByUser(response)) {
+      const error = response.description ?? 'bot was blocked by the user';
+      await this.users.markBotBlocked(user.telegramId, error);
+    }
+
+    return response;
   }
 
   private getAdminRecipients(includeManager: boolean) {

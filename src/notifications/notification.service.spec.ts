@@ -6,6 +6,7 @@ import { PaymentAttempt } from '../payments/payment-attempt.entity';
 import { Product } from '../products/product.entity';
 import { SupportRequest } from '../support/support-request.entity';
 import { User } from '../users/user.entity';
+import { UserService } from '../users/user.service';
 import { AdminTelegramApiService } from '../admin-bot/admin-telegram-api.service';
 import { TelegramApiService } from './telegram-api.service';
 import { NotificationService } from './notification.service';
@@ -19,6 +20,7 @@ describe('NotificationService', () => {
     } as unknown as ConfigService;
     const telegram = {
       sendMessage: jest.fn().mockResolvedValue(undefined),
+      isBotBlockedByUser: jest.fn(() => false),
     } as unknown as TelegramApiService;
     const adminTelegram = {
       sendMessage: jest.fn().mockResolvedValue(undefined),
@@ -29,12 +31,16 @@ describe('NotificationService', () => {
     const inviteLinks = {
       createSingleUseInviteLink: jest.fn(),
     } as unknown as jest.Mocked<InviteLinksService>;
+    const users = {
+      markBotBlocked: jest.fn(),
+    } as unknown as jest.Mocked<UserService>;
     const service = new NotificationService(
       config,
       telegram,
       adminTelegram,
       flow,
       inviteLinks,
+      users,
     );
 
     const paymentAttempt = {
@@ -61,6 +67,7 @@ describe('NotificationService', () => {
     expect(telegram.sendMessage).toHaveBeenCalledWith(
       'user-chat-id',
       'payment success',
+      undefined,
     );
     expect(adminTelegram.sendMessage).toHaveBeenCalledTimes(1);
     expect(adminTelegram.sendMessage).toHaveBeenCalledWith(
@@ -78,6 +85,7 @@ describe('NotificationService', () => {
     } as unknown as ConfigService;
     const telegram = {
       sendMessage: jest.fn().mockResolvedValue(undefined),
+      isBotBlockedByUser: jest.fn(() => false),
     } as unknown as TelegramApiService;
     const adminTelegram = {
       sendMessage: jest.fn().mockResolvedValue(undefined),
@@ -86,12 +94,16 @@ describe('NotificationService', () => {
     const inviteLinks = {
       createSingleUseInviteLink: jest.fn(),
     } as unknown as jest.Mocked<InviteLinksService>;
+    const users = {
+      markBotBlocked: jest.fn(),
+    } as unknown as jest.Mocked<UserService>;
     const service = new NotificationService(
       config,
       telegram,
       adminTelegram,
       flow,
       inviteLinks,
+      users,
     );
 
     await service.notifySupportRequest({
@@ -131,6 +143,7 @@ describe('NotificationService', () => {
     } as unknown as ConfigService;
     const telegram = {
       sendMessage: jest.fn().mockResolvedValue(undefined),
+      isBotBlockedByUser: jest.fn(() => false),
     } as unknown as jest.Mocked<TelegramApiService>;
     const adminTelegram = {
       sendMessage: jest.fn().mockResolvedValue(undefined),
@@ -144,12 +157,16 @@ describe('NotificationService', () => {
         memberLimit: 1,
       }),
     } as unknown as jest.Mocked<InviteLinksService>;
+    const users = {
+      markBotBlocked: jest.fn(),
+    } as unknown as jest.Mocked<UserService>;
     const service = new NotificationService(
       config,
       telegram,
       adminTelegram,
       flow,
       inviteLinks,
+      users,
     );
 
     await service.notifyPaymentSuccess({
@@ -192,6 +209,61 @@ describe('NotificationService', () => {
           ],
         ],
       },
+    );
+  });
+
+  it('marks user as bot-blocked when Telegram returns blocked error', async () => {
+    const config = {
+      get: jest.fn((key: string, defaultValue?: string) =>
+        key === 'ADMIN_TELEGRAM_ID' ? 'admin-chat-id' : defaultValue,
+      ),
+    } as unknown as ConfigService;
+    const blockedResponse = {
+      ok: false,
+      description: 'Forbidden: bot was blocked by the user',
+    };
+    const telegram = {
+      sendMessage: jest.fn().mockResolvedValue(blockedResponse),
+      isBotBlockedByUser: jest.fn(() => true),
+    } as unknown as jest.Mocked<TelegramApiService>;
+    const adminTelegram = {
+      sendMessage: jest.fn().mockResolvedValue(undefined),
+    } as unknown as AdminTelegramApiService;
+    const flow = {
+      getPaymentSuccessMessage: jest.fn(() => 'payment success'),
+    } as unknown as BotFlowService;
+    const inviteLinks = {
+      createSingleUseInviteLink: jest.fn(),
+    } as unknown as jest.Mocked<InviteLinksService>;
+    const users = {
+      markBotBlocked: jest.fn(),
+    } as unknown as jest.Mocked<UserService>;
+    const service = new NotificationService(
+      config,
+      telegram,
+      adminTelegram,
+      flow,
+      inviteLinks,
+      users,
+    );
+
+    await service.notifyPaymentSuccess({
+      amount: '100.00',
+      currency: 'UAH',
+      paidAt: new Date('2026-07-01T12:00:00.000Z'),
+      providerTransactionId: 'tx-1',
+      product: {
+        title: 'The Cycle',
+        type: ProductType.Subscription,
+      } as Product,
+      user: {
+        telegramId: 'user-chat-id',
+      } as User,
+    } as PaymentAttempt);
+
+    expect(users.markBotBlocked).toHaveBeenCalledWith(
+      'user-chat-id',
+      'Forbidden: bot was blocked by the user',
     );
   });
 });

@@ -117,8 +117,20 @@ export class UserService {
     user.firstName = from.first_name;
     user.lastName = from.last_name;
     user.languageCode = from.language_code;
+    user.botBlockedAt = null;
+    user.botLastError = null;
 
     return this.userRepository.save(user);
+  }
+
+  async markBotBlocked(telegramId: string | number, error: string) {
+    await this.userRepository.update(
+      { telegramId: String(telegramId) },
+      {
+        botBlockedAt: new Date(),
+        botLastError: error,
+      },
+    );
   }
 
   findByTelegramId(telegramId: string | number): Promise<User | null> {

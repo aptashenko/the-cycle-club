@@ -35,6 +35,12 @@ export class User {
   @Column({ default: 'none' })
   membershipStatus: 'none' | 'active';
 
+  @Column({ name: 'bot_blocked_at', type: 'timestamptz', nullable: true })
+  botBlockedAt?: Date | null;
+
+  @Column({ name: 'bot_last_error', type: 'text', nullable: true })
+  botLastError?: string | null;
+
   @OneToMany(() => Subscription, (subscription) => subscription.user)
   subscriptions: Subscription[];
 
