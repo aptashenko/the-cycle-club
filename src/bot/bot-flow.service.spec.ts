@@ -25,7 +25,7 @@ describe('BotFlowService', () => {
     const keyboard = service.buildScreenInlineKeyboard('webinar1');
 
     expect(keyboard?.[0]?.[0]).toEqual({
-      text: 'Записаться на бесплатный эфир',
+      text: 'Записаться на эфир',
       callback_data: 'live-event:register:webinar1',
     });
     expect(
@@ -35,7 +35,7 @@ describe('BotFlowService', () => {
       [
         {
           text: 'Перейти в Telegram',
-          url: 'https://telegram.me/assistant_nicolaeva',
+          url: 'https://t.me/+S2XB1Sq_collZjRi',
         },
       ],
     ]);

@@ -71,6 +71,10 @@ export class BotService {
       return;
     }
 
+    if (message.chat.type !== 'private') {
+      return;
+    }
+
     const user = await this.users.upsertTelegramUser(message.from);
     const text = message.text.trim();
     const isStartCommand = this.isStartCommand(text);

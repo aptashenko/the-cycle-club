@@ -94,6 +94,23 @@ describe('BotService support flow', () => {
     );
   });
 
+  it('ignores messages from group chats', async () => {
+    const { service, telegram, activity } = buildService();
+
+    await service.handleUpdate({
+      update_id: 1,
+      message: {
+        message_id: 11,
+        from: { id: 123456, first_name: 'Jane' },
+        chat: { id: -100123456, type: 'supergroup', title: 'Closed chat' },
+        text: 'Любое сообщение в закрытом чате',
+      },
+    });
+
+    expect(activity.track).not.toHaveBeenCalled();
+    expect(telegram.sendMessage).not.toHaveBeenCalled();
+  });
+
   it('asks for a message after selecting other support topic', async () => {
     const { service, telegram, support, flow } = buildService();
 
@@ -194,7 +211,7 @@ describe('BotService support flow', () => {
           [
             {
               text: 'Перейти в Telegram',
-              url: 'https://telegram.me/assistant_nicolaeva',
+              url: 'https://t.me/+S2XB1Sq_collZjRi',
             },
           ],
         ],
