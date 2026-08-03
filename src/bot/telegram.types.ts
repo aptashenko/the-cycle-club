@@ -13,11 +13,29 @@ export type TelegramChat = {
   title?: string;
 };
 
+export type TelegramVideoNote = {
+  file_id: string;
+  file_unique_id?: string;
+  length: number;
+  duration: number;
+  file_size?: number;
+};
+
+export type TelegramPhotoSize = {
+  file_id: string;
+  file_unique_id?: string;
+  width: number;
+  height: number;
+  file_size?: number;
+};
+
 export type TelegramMessage = {
   message_id: number;
   from?: TelegramUser;
   chat: TelegramChat;
   text?: string;
+  video_note?: TelegramVideoNote;
+  photo?: TelegramPhotoSize[];
 };
 
 export type TelegramCallbackQuery = {

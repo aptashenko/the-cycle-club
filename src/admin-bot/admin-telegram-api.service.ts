@@ -8,6 +8,12 @@ type TelegramResponse<T> = {
   result?: T;
   description?: string;
 };
+type TelegramFile = {
+  file_id: string;
+  file_unique_id?: string;
+  file_size?: number;
+  file_path?: string;
+};
 
 @Injectable()
 export class AdminTelegramApiService {
@@ -49,6 +55,44 @@ export class AdminTelegramApiService {
       message_id: messageId,
       reply_markup: replyMarkup,
     });
+  }
+
+  async sendVideoNote(
+    chatId: string | number,
+    videoNoteFileId: string,
+    replyMarkup?: TelegramMarkup,
+  ) {
+    return this.request('sendVideoNote', {
+      chat_id: chatId,
+      video_note: videoNoteFileId,
+      reply_markup: replyMarkup,
+    });
+  }
+
+  async getFile(fileId: string) {
+    return this.request<TelegramFile>('getFile', {
+      file_id: fileId,
+    });
+  }
+
+  async downloadFile(filePath: string) {
+    if (!this.token) {
+      this.logger.warn('Admin Telegram bot token is not configured');
+      return null;
+    }
+
+    const response = await fetch(
+      `https://api.telegram.org/file/bot${this.token}/${filePath}`,
+    );
+
+    if (!response.ok) {
+      this.logger.error(
+        `Admin Telegram file download failed: ${response.status}`,
+      );
+      return null;
+    }
+
+    return Buffer.from(await response.arrayBuffer());
   }
 
   async deleteWebhook(dropPendingUpdates = false) {

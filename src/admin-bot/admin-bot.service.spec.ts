@@ -12,6 +12,9 @@ import { UserActivityEvent } from '../user-activity/user-activity-event.entity';
 import { User } from '../users/user.entity';
 import { AdminBotService } from './admin-bot.service';
 import { AdminTelegramApiService } from './admin-telegram-api.service';
+import { BroadcastCampaign } from './broadcast-campaign.entity';
+import { BroadcastDelivery } from './broadcast-delivery.entity';
+import { BroadcastMediaAsset } from './broadcast-media-asset.entity';
 
 type BroadcastButton = {
   text: string;
@@ -24,6 +27,8 @@ type AdminBotServicePrivate = {
     chatId: string | number,
     text: string,
     button?: BroadcastButton,
+    media?: unknown,
+    recipientsCount?: number,
   ): Promise<void>;
   sleep(ms: number): Promise<void>;
 };
@@ -36,6 +41,33 @@ function adminMessage(text: string): TelegramUpdate {
       from: { id: 123, first_name: 'Admin' },
       chat: { id: 123, type: 'private' },
       text,
+    },
+  };
+}
+
+function adminPhoto(): TelegramUpdate {
+  return {
+    update_id: 1,
+    message: {
+      message_id: 1,
+      from: { id: 123, first_name: 'Admin' },
+      chat: { id: 123, type: 'private' },
+      photo: [
+        {
+          file_id: 'photo-small-file-id',
+          file_unique_id: 'photo-small-unique-id',
+          width: 320,
+          height: 240,
+          file_size: 1000,
+        },
+        {
+          file_id: 'photo-large-file-id',
+          file_unique_id: 'photo-large-unique-id',
+          width: 1280,
+          height: 960,
+          file_size: 5000,
+        },
+      ],
     },
   };
 }
@@ -61,9 +93,23 @@ function createService() {
     sendMessage: jest.fn().mockResolvedValue({ ok: true }),
     answerCallbackQuery: jest.fn().mockResolvedValue({ ok: true }),
     editMessageReplyMarkup: jest.fn().mockResolvedValue({ ok: true }),
+    getFile: jest.fn().mockResolvedValue({
+      ok: true,
+      result: { file_path: 'photos/file.jpg' },
+    }),
+    downloadFile: jest.fn().mockResolvedValue(Buffer.from('photo-bytes')),
   } as unknown as jest.Mocked<AdminTelegramApiService>;
   const mainTelegram = {
-    sendMessage: jest.fn().mockResolvedValue({ ok: true }),
+    sendMessage: jest
+      .fn()
+      .mockResolvedValue({ ok: true, result: { message_id: 101 } }),
+    sendVideoNoteFile: jest
+      .fn()
+      .mockResolvedValue({ ok: true, result: { message_id: 100 } }),
+    sendPhotoBuffer: jest
+      .fn()
+      .mockResolvedValue({ ok: true, result: { message_id: 100 } }),
+    deleteMessage: jest.fn().mockResolvedValue({ ok: true }),
   } as unknown as jest.Mocked<TelegramApiService>;
   const flow = {
     getScreenText: jest
@@ -140,6 +186,65 @@ function createService() {
   const activity = {
     count: jest.fn().mockResolvedValue(0),
   } as unknown as jest.Mocked<Repository<UserActivityEvent>>;
+  const broadcastMediaAssets = {
+    findOne: jest.fn().mockResolvedValue(null),
+    find: jest.fn().mockResolvedValue([]),
+    create: jest.fn((input: Partial<BroadcastMediaAsset>) => input),
+    save: jest.fn(
+      async (input: Partial<BroadcastMediaAsset>) =>
+        ({
+          id: 'media-asset-id',
+          ...input,
+        }) as BroadcastMediaAsset,
+    ),
+    delete: jest.fn().mockResolvedValue({ affected: 0 }),
+  } as unknown as jest.Mocked<Repository<BroadcastMediaAsset>>;
+  const broadcastCampaign = {
+    id: 'broadcast-id',
+    text: 'Hello <club>',
+    createdAt: new Date('2026-07-21T12:00:00.000Z'),
+    sentCount: 1,
+    failedCount: 0,
+    skippedCount: 0,
+    deletedCount: 0,
+    deleteFailedCount: 0,
+  } as BroadcastCampaign;
+  const broadcastCampaigns = {
+    create: jest.fn((input: Partial<BroadcastCampaign>) => input),
+    save: jest.fn(
+      async (input: Partial<BroadcastCampaign>) =>
+        ({
+          id: 'broadcast-id',
+          sentCount: 0,
+          failedCount: 0,
+          skippedCount: 0,
+          deletedCount: 0,
+          deleteFailedCount: 0,
+          ...input,
+        }) as BroadcastCampaign,
+    ),
+    find: jest.fn().mockResolvedValue([broadcastCampaign]),
+    findOne: jest.fn().mockResolvedValue(broadcastCampaign),
+  } as unknown as jest.Mocked<Repository<BroadcastCampaign>>;
+  const broadcastDelivery = {
+    id: 'delivery-id',
+    broadcastId: 'broadcast-id',
+    telegramId: 'user-chat-id',
+    messageId: 101,
+    messageType: 'text',
+    sentAt: new Date('2026-07-21T12:01:00.000Z'),
+  } as BroadcastDelivery;
+  const broadcastDeliveries = {
+    create: jest.fn((input: Partial<BroadcastDelivery>) => input),
+    save: jest.fn(
+      async (input: Partial<BroadcastDelivery>) =>
+        ({
+          id: 'delivery-id',
+          ...input,
+        }) as BroadcastDelivery,
+    ),
+    find: jest.fn().mockResolvedValue([broadcastDelivery]),
+  } as unknown as jest.Mocked<Repository<BroadcastDelivery>>;
 
   const service = new AdminBotService(
     adminTelegram,
@@ -153,6 +258,9 @@ function createService() {
     payments,
     supportRequests,
     activity,
+    broadcastMediaAssets,
+    broadcastCampaigns,
+    broadcastDeliveries,
   );
 
   return {
@@ -165,6 +273,9 @@ function createService() {
     subscriptions,
     payments,
     activity,
+    broadcastMediaAssets,
+    broadcastCampaigns,
+    broadcastDeliveries,
     flow,
     inviteLinks,
   };
@@ -268,6 +379,7 @@ describe('AdminBotService', () => {
     await service.handleUpdate(adminMessage('Hello <club>'));
     await service.handleUpdate(adminMessage('Купить'));
     await service.handleUpdate(adminMessage('https://example.com/page'));
+    await service.handleUpdate(adminMessage('Без медиа'));
     await service.handleUpdate(adminMessage('✅ Подтвердить рассылку'));
 
     expect(adminTelegram.sendMessage).toHaveBeenCalledWith(
@@ -279,14 +391,26 @@ describe('AdminBotService', () => {
         ],
       },
     );
-    expect(runBroadcast).toHaveBeenCalledWith(123, 'Hello <club>', {
-      text: 'Купить',
-      url: 'https://example.com/page',
-    });
+    expect(runBroadcast).toHaveBeenCalledWith(
+      123,
+      'Hello <club>',
+      {
+        text: 'Купить',
+        url: 'https://example.com/page',
+      },
+      undefined,
+      1,
+    );
   });
 
   it('sends broadcast messages with an inline URL button', async () => {
-    const { service, adminTelegram, mainTelegram } = createService();
+    const {
+      service,
+      adminTelegram,
+      mainTelegram,
+      broadcastCampaigns,
+      broadcastDeliveries,
+    } = createService();
     const privateService = service as unknown as AdminBotServicePrivate;
     jest.spyOn(privateService, 'sleep').mockResolvedValue(undefined);
 
@@ -308,6 +432,119 @@ describe('AdminBotService', () => {
       123,
       expect.stringContaining('Sent: 1'),
     );
+    expect(broadcastCampaigns.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: 'Hello <club>',
+        sentCount: 1,
+        failedCount: 0,
+      }),
+    );
+    expect(broadcastDeliveries.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        broadcastId: 'broadcast-id',
+        telegramId: 'user-chat-id',
+        messageId: 101,
+        messageType: 'text',
+      }),
+    );
+  });
+
+  it('lists recent broadcasts with delete commands', async () => {
+    const { service, adminTelegram } = createService();
+
+    await service.handleUpdate(adminMessage('/broadcasts'));
+
+    expect(adminTelegram.sendMessage).toHaveBeenCalledWith(
+      123,
+      expect.stringContaining('/delete_broadcast broadcast-id'),
+    );
+  });
+
+  it('deletes saved broadcast messages', async () => {
+    const { service, adminTelegram, mainTelegram, broadcastDeliveries } =
+      createService();
+
+    await service.handleUpdate(adminMessage('/delete_broadcast broadcast-id'));
+
+    expect(mainTelegram.deleteMessage).toHaveBeenCalledWith(
+      'user-chat-id',
+      101,
+    );
+    expect(broadcastDeliveries.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'delivery-id',
+        deletedAt: expect.any(Date),
+        deleteError: null,
+      }),
+    );
+    expect(adminTelegram.sendMessage).toHaveBeenLastCalledWith(
+      123,
+      expect.stringContaining('Broadcast delete finished'),
+    );
+  });
+
+  it('saves a broadcast photo from admin message', async () => {
+    const { service, adminTelegram, broadcastMediaAssets } = createService();
+
+    await service.handleUpdate(adminMessage('/save_photo launch_photo'));
+    await service.handleUpdate(adminPhoto());
+
+    expect(adminTelegram.getFile).toHaveBeenCalledWith('photo-large-file-id');
+    expect(broadcastMediaAssets.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'photo',
+        key: 'launch_photo',
+        adminFileId: 'photo-large-file-id',
+        fileUniqueId: 'photo-large-unique-id',
+        fileData: Buffer.from('photo-bytes'),
+        fileSize: 5000,
+        width: 1280,
+        height: 960,
+        createdByTelegramId: '123',
+      }),
+    );
+    expect(adminTelegram.sendMessage).toHaveBeenLastCalledWith(
+      123,
+      expect.stringContaining('Photo saved'),
+    );
+  });
+
+  it('sends broadcast photo media and stores its delivery', async () => {
+    const { service, mainTelegram, broadcastMediaAssets, broadcastDeliveries } =
+      createService();
+    const privateService = service as unknown as AdminBotServicePrivate;
+    jest.spyOn(privateService, 'sleep').mockResolvedValue(undefined);
+    jest.spyOn(broadcastMediaAssets, 'findOne').mockResolvedValue({
+      id: 'photo-asset-id',
+      type: 'photo',
+      key: 'launch_photo',
+      fileData: Buffer.from('photo-bytes'),
+    } as BroadcastMediaAsset);
+
+    await privateService.runBroadcast(
+      123,
+      'Hello <club>',
+      undefined,
+      {
+        type: 'photo',
+        assetId: 'photo-asset-id',
+        key: 'launch_photo',
+      },
+      1,
+    );
+
+    expect(mainTelegram.sendPhotoBuffer).toHaveBeenCalledWith(
+      'user-chat-id',
+      Buffer.from('photo-bytes'),
+    );
+    expect(broadcastDeliveries.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        broadcastId: 'broadcast-id',
+        telegramId: 'user-chat-id',
+        messageId: 100,
+        messageType: 'photo',
+      }),
+    );
   });
 
   it('starts a marathon payment broadcast with an inline callback button', async () => {
@@ -320,6 +557,7 @@ describe('AdminBotService', () => {
     await service.handleUpdate(adminMessage('/broadcast_marathon'));
     await service.handleUpdate(adminMessage('Стандартный текст'));
     await service.handleUpdate(adminMessage('Стандартная кнопка'));
+    await service.handleUpdate(adminMessage('Без медиа'));
     await service.handleUpdate(adminMessage('✅ Подтвердить рассылку'));
 
     expect(adminTelegram.sendMessage).toHaveBeenCalledWith(
@@ -345,6 +583,8 @@ describe('AdminBotService', () => {
         text: 'Записаться на марафон 1499.00 UAH',
         callbackData: 'payment:start:marathon-4',
       },
+      undefined,
+      1,
     );
   });
 
@@ -358,12 +598,19 @@ describe('AdminBotService', () => {
     await service.handleUpdate(adminMessage('/broadcast_marathon'));
     await service.handleUpdate(adminMessage('Мой текст про марафон'));
     await service.handleUpdate(adminMessage('Стандартная кнопка'));
+    await service.handleUpdate(adminMessage('Без медиа'));
     await service.handleUpdate(adminMessage('✅ Подтвердить рассылку'));
 
-    expect(runBroadcast).toHaveBeenCalledWith(123, 'Мой текст про марафон', {
-      text: 'Записаться на марафон 1499.00 UAH',
-      callbackData: 'payment:start:marathon-4',
-    });
+    expect(runBroadcast).toHaveBeenCalledWith(
+      123,
+      'Мой текст про марафон',
+      {
+        text: 'Записаться на марафон 1499.00 UAH',
+        callbackData: 'payment:start:marathon-4',
+      },
+      undefined,
+      1,
+    );
   });
 
   it('starts a marathon payment broadcast with custom button text', async () => {
@@ -376,12 +623,19 @@ describe('AdminBotService', () => {
     await service.handleUpdate(adminMessage('/broadcast_marathon'));
     await service.handleUpdate(adminMessage('Мой текст про марафон'));
     await service.handleUpdate(adminMessage('Оплатить марафон'));
+    await service.handleUpdate(adminMessage('Без медиа'));
     await service.handleUpdate(adminMessage('✅ Подтвердить рассылку'));
 
-    expect(runBroadcast).toHaveBeenCalledWith(123, 'Мой текст про марафон', {
-      text: 'Оплатить марафон',
-      callbackData: 'payment:start:marathon-4',
-    });
+    expect(runBroadcast).toHaveBeenCalledWith(
+      123,
+      'Мой текст про марафон',
+      {
+        text: 'Оплатить марафон',
+        callbackData: 'payment:start:marathon-4',
+      },
+      undefined,
+      1,
+    );
   });
 
   it('finds a user by Telegram username', async () => {
