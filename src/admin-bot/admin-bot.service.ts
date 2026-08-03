@@ -444,8 +444,8 @@ export class AdminBotService {
       await this.sendCommandHint(
         chatId,
         'User profile',
-        '/user &lt;telegram_id&gt;',
-        '/user 123456789',
+        '/user &lt;telegram_id_or_username&gt;',
+        '/user @username',
       );
       return true;
     }
@@ -454,8 +454,8 @@ export class AdminBotService {
       await this.sendCommandHint(
         chatId,
         'Latest payments',
-        '/payments &lt;telegram_id&gt;',
-        '/payments 123456789',
+        '/payments &lt;telegram_id_or_username&gt;',
+        '/payments @username',
       );
       return true;
     }
@@ -464,8 +464,8 @@ export class AdminBotService {
       await this.sendCommandHint(
         chatId,
         'User subscriptions',
-        '/subscriptions &lt;telegram_id&gt;',
-        '/subscriptions 123456789',
+        '/subscriptions &lt;telegram_id_or_username&gt;',
+        '/subscriptions @username',
       );
       return true;
     }
@@ -474,8 +474,8 @@ export class AdminBotService {
       await this.sendCommandHint(
         chatId,
         'User activity',
-        '/activity &lt;telegram_id&gt;',
-        '/activity 123456789',
+        '/activity &lt;telegram_id_or_username&gt;',
+        '/activity @username',
       );
       return true;
     }
@@ -533,13 +533,13 @@ export class AdminBotService {
         '/marathons - marathon flow payments',
         '/resolve_support &lt;request_id&gt; - mark support request resolved',
         '/reply_support &lt;request_id&gt; &lt;message&gt; - reply to support user',
-        '/user &lt;telegram_id&gt; - user profile',
-        '/payments &lt;telegram_id&gt; - latest payments',
-        '/subscriptions &lt;telegram_id&gt; - user subscriptions',
+        '/user &lt;telegram_id_or_username&gt; - user profile',
+        '/payments &lt;telegram_id_or_username&gt; - latest payments',
+        '/subscriptions &lt;telegram_id_or_username&gt; - user subscriptions',
         '/grant_subscription - grant The Cycle subscription by username',
         '/broadcast - send a text broadcast from the main bot',
         '/broadcast_marathon - send marathon-4 payment broadcast',
-        '/activity &lt;telegram_id&gt; - user path',
+        '/activity &lt;telegram_id_or_username&gt; - user path',
         '/cancel - cancel current dialog',
       ].join('\n'),
       this.getAdminMenuMarkup(),
@@ -2055,22 +2055,49 @@ export class AdminBotService {
     ].join('\n');
   }
 
-  private async findUserOrReply(chatId: string | number, telegramId?: string) {
-    if (!telegramId) {
+  private async findUserOrReply(
+    chatId: string | number,
+    userReference?: string,
+  ) {
+    if (!userReference) {
       await this.telegram.sendMessage(
         chatId,
-        'Usage: /user &lt;telegram_id&gt;',
+        'Usage: /user &lt;telegram_id_or_username&gt;',
       );
       return null;
     }
 
-    const user = await this.users.findOne({ where: { telegramId } });
+    const normalizedTelegramId = this.normalizeTelegramId(userReference);
+    const normalizedUsername = this.normalizeUsername(userReference);
+    if (!normalizedTelegramId && !normalizedUsername) {
+      await this.telegram.sendMessage(
+        chatId,
+        'Send a numeric Telegram ID or Telegram username, for example: <code>/user 123456789</code> or <code>/user @username</code>.',
+      );
+      return null;
+    }
+
+    const user = normalizedTelegramId
+      ? await this.users.findOne({
+          where: { telegramId: normalizedTelegramId },
+        })
+      : await this.findUserByUsername(normalizedUsername as string);
     if (!user) {
       await this.telegram.sendMessage(chatId, 'User not found.');
       return null;
     }
 
     return user;
+  }
+
+  private normalizeTelegramId(value: string) {
+    const telegramId = value.trim();
+
+    if (!/^\d+$/.test(telegramId)) {
+      return null;
+    }
+
+    return BigInt(telegramId) <= 9223372036854775807n ? telegramId : null;
   }
 
   private async findUserByUsername(username: string) {

@@ -99,6 +99,11 @@ function createService() {
   } as unknown as ConfigService;
   const users = {
     count: jest.fn().mockResolvedValue(1),
+    findOne: jest.fn().mockResolvedValue(null),
+    createQueryBuilder: jest.fn(() => ({
+      where: jest.fn().mockReturnThis(),
+      getOne: jest.fn().mockResolvedValue(null),
+    })),
     find: jest
       .fn()
       .mockResolvedValueOnce([{ telegramId: 'user-chat-id' }])
@@ -126,6 +131,15 @@ function createService() {
       isActive: true,
     }),
   } as unknown as jest.Mocked<Repository<Product>>;
+  const subscriptions = {
+    count: jest.fn().mockResolvedValue(0),
+  } as unknown as jest.Mocked<Repository<Subscription>>;
+  const payments = {
+    count: jest.fn().mockResolvedValue(0),
+  } as unknown as jest.Mocked<Repository<PaymentAttempt>>;
+  const activity = {
+    count: jest.fn().mockResolvedValue(0),
+  } as unknown as jest.Mocked<Repository<UserActivityEvent>>;
 
   const service = new AdminBotService(
     adminTelegram,
@@ -135,10 +149,10 @@ function createService() {
     config,
     users,
     products,
-    {} as Repository<Subscription>,
-    {} as Repository<PaymentAttempt>,
+    subscriptions,
+    payments,
     supportRequests,
-    {} as Repository<UserActivityEvent>,
+    activity,
   );
 
   return {
@@ -148,6 +162,9 @@ function createService() {
     users,
     supportRequests,
     products,
+    subscriptions,
+    payments,
+    activity,
     flow,
     inviteLinks,
   };
@@ -365,6 +382,48 @@ describe('AdminBotService', () => {
       text: 'Оплатить марафон',
       callbackData: 'payment:start:marathon-4',
     });
+  });
+
+  it('finds a user by Telegram username', async () => {
+    const { service, adminTelegram, users } = createService();
+    const user = {
+      id: 'user-id',
+      telegramId: '123456789',
+      username: 'btflfl',
+      firstName: 'Client',
+      membershipStatus: 'none',
+      createdAt: new Date('2026-07-21T12:00:00.000Z'),
+    } as User;
+    const getOne = jest.fn().mockResolvedValue(user);
+    const where = jest.fn().mockReturnValue({ getOne });
+    jest.spyOn(users, 'createQueryBuilder').mockReturnValue({
+      where,
+    } as unknown as ReturnType<Repository<User>['createQueryBuilder']>);
+
+    await service.handleUpdate(adminMessage('/user @btflfl'));
+
+    expect(users.findOne).not.toHaveBeenCalled();
+    expect(where).toHaveBeenCalledWith(
+      'LOWER(user.username) = LOWER(:username)',
+      { username: 'btflfl' },
+    );
+    expect(adminTelegram.sendMessage).toHaveBeenCalledWith(
+      123,
+      expect.stringContaining('Username: @btflfl'),
+    );
+  });
+
+  it('rejects invalid user references before querying Postgres', async () => {
+    const { service, adminTelegram, users } = createService();
+
+    await service.handleUpdate(adminMessage('/user bad!'));
+
+    expect(users.findOne).not.toHaveBeenCalled();
+    expect(users.createQueryBuilder).not.toHaveBeenCalled();
+    expect(adminTelegram.sendMessage).toHaveBeenCalledWith(
+      123,
+      'Send a numeric Telegram ID or Telegram username, for example: <code>/user 123456789</code> or <code>/user @username</code>.',
+    );
   });
 
   it('replies to a support request user from the admin bot', async () => {
