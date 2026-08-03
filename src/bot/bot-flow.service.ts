@@ -6,11 +6,13 @@ import {
   FlowButton,
   FlowButtonVisibility,
   FlowScreen,
+  LiveEventConfig,
   SupportTopicConfig,
 } from './bot-flow.types';
 
 export const FLOW_CALLBACK_PREFIX = 'flow:';
 export const PAYMENT_CALLBACK_PREFIX = 'payment:start:';
+export const LIVE_EVENT_REGISTER_CALLBACK_PREFIX = 'live-event:register:';
 export const SUPPORT_OPEN_CALLBACK = 'support:open';
 export const SUPPORT_TOPIC_CALLBACK_PREFIX = 'support:topic:';
 
@@ -139,6 +141,49 @@ export class BotFlowService {
     return callbackData.slice(PAYMENT_CALLBACK_PREFIX.length);
   }
 
+  getLiveEventSlugFromCallback(callbackData: string): string | null {
+    if (!callbackData.startsWith(LIVE_EVENT_REGISTER_CALLBACK_PREFIX)) {
+      return null;
+    }
+
+    return callbackData.slice(LIVE_EVENT_REGISTER_CALLBACK_PREFIX.length);
+  }
+
+  getLiveEvent(eventSlug: string): LiveEventConfig {
+    const event = this.config.liveEvents[eventSlug];
+
+    if (!event) {
+      throw new Error(`Live event config not found: ${eventSlug}`);
+    }
+
+    return event;
+  }
+
+  getLiveEventRegistrationMessage(
+    eventSlug: string,
+    isNewRegistration: boolean,
+  ): string {
+    const event = this.getLiveEvent(eventSlug);
+    const lines = isNewRegistration
+      ? event.successMessage
+      : event.alreadyRegisteredMessage;
+
+    return this.renderLines(lines, { eventTitle: event.title });
+  }
+
+  buildLiveEventLinkInlineKeyboard(eventSlug: string): InlineKeyboard {
+    const event = this.getLiveEvent(eventSlug);
+
+    return [
+      [
+        {
+          text: event.joinButtonText,
+          url: event.telegramUrl,
+        },
+      ],
+    ];
+  }
+
   buildPaymentIntro(
     hasActiveSubscription: boolean,
     values: RenderValues,
@@ -235,6 +280,13 @@ export class BotFlowService {
       };
     }
 
+    if (button.action === 'registerLiveEvent' && button.eventSlug) {
+      return {
+        text,
+        callback_data: `${LIVE_EVENT_REGISTER_CALLBACK_PREFIX}${button.eventSlug}`,
+      };
+    }
+
     if (button.action === 'openSupport') {
       return {
         text,
@@ -311,6 +363,7 @@ export class BotFlowService {
         ),
       },
       support: this.parseSupport(config.support),
+      liveEvents: this.parseLiveEvents(config.liveEvents),
       payment: this.parsePayment(config.payment),
       subscriptions: this.parseSubscriptions(config.subscriptions),
     };
@@ -411,7 +464,11 @@ export class BotFlowService {
 
     if (button.action !== undefined) {
       const action = this.assertString(button.action, `${path}.action`);
-      if (action !== 'startPayment' && action !== 'openSupport') {
+      if (
+        action !== 'startPayment' &&
+        action !== 'openSupport' &&
+        action !== 'registerLiveEvent'
+      ) {
         throw new Error(`${path}.action has unsupported value: ${action}`);
       }
       parsed.action = action;
@@ -421,6 +478,13 @@ export class BotFlowService {
       parsed.productSlug = this.assertString(
         button.productSlug,
         `${path}.productSlug`,
+      );
+    }
+
+    if (button.eventSlug !== undefined) {
+      parsed.eventSlug = this.assertString(
+        button.eventSlug,
+        `${path}.eventSlug`,
       );
     }
 
@@ -434,6 +498,10 @@ export class BotFlowService {
 
     if (parsed.action === 'startPayment' && !parsed.productSlug) {
       throw new Error(`${path}.productSlug is required for startPayment`);
+    }
+
+    if (parsed.action === 'registerLiveEvent' && !parsed.eventSlug) {
+      throw new Error(`${path}.eventSlug is required for registerLiveEvent`);
     }
 
     return parsed;
@@ -496,6 +564,37 @@ export class BotFlowService {
       ),
       topics,
     };
+  }
+
+  private parseLiveEvents(value: unknown): BotFlowConfig['liveEvents'] {
+    const liveEvents = this.assertObject(value, 'liveEvents');
+    const parsed: BotFlowConfig['liveEvents'] = {};
+
+    for (const [eventSlug, eventValue] of Object.entries(liveEvents)) {
+      const event = this.assertObject(eventValue, `liveEvents.${eventSlug}`);
+
+      parsed[eventSlug] = {
+        title: this.assertString(event.title, `liveEvents.${eventSlug}.title`),
+        telegramUrl: this.assertString(
+          event.telegramUrl,
+          `liveEvents.${eventSlug}.telegramUrl`,
+        ),
+        joinButtonText: this.assertString(
+          event.joinButtonText,
+          `liveEvents.${eventSlug}.joinButtonText`,
+        ),
+        successMessage: this.parseTextLines(
+          event.successMessage,
+          `liveEvents.${eventSlug}.successMessage`,
+        ),
+        alreadyRegisteredMessage: this.parseTextLines(
+          event.alreadyRegisteredMessage,
+          `liveEvents.${eventSlug}.alreadyRegisteredMessage`,
+        ),
+      };
+    }
+
+    return parsed;
   }
 
   private parsePayment(value: unknown): BotFlowConfig['payment'] {
@@ -577,6 +676,16 @@ export class BotFlowService {
           if (button.target && !config.screens[button.target]) {
             throw new Error(
               `screens.${screenId}.buttons.${rowIndex}.${buttonIndex}.target not found: ${button.target}`,
+            );
+          }
+
+          if (
+            button.action === 'registerLiveEvent' &&
+            button.eventSlug &&
+            !config.liveEvents[button.eventSlug]
+          ) {
+            throw new Error(
+              `screens.${screenId}.buttons.${rowIndex}.${buttonIndex}.eventSlug not found: ${button.eventSlug}`,
             );
           }
         }

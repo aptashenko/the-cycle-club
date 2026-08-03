@@ -6,6 +6,7 @@ import { AdminBotModule } from './admin-bot/admin-bot.module';
 import { AttributionModule } from './attribution/attribution.module';
 import { BotModule } from './bot/bot.module';
 import { MigrationBotModule } from './migration-bot/migration-bot.module';
+import { LiveEventsModule } from './live-events/live-events.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PaymentsModule } from './payments/payments.module';
 import { ProductsModule } from './products/products.module';
@@ -15,6 +16,7 @@ import { SupportModule } from './support/support.module';
 import { UsersModule } from './users/users.module';
 import { buildDataSourceOptions } from './database/typeorm.config';
 import { FilesController } from './files/files.controller';
+import { GoogleSheetsModule } from './google-sheets/google-sheets.module';
 
 @Module({
   imports: [
@@ -35,11 +37,13 @@ import { FilesController } from './files/files.controller';
     NotificationsModule,
     PaymentsModule,
     SupportModule,
+    LiveEventsModule,
     AttributionModule,
     BotModule,
     AdminBotModule,
     MigrationBotModule,
     SchedulerModule,
+    GoogleSheetsModule,
   ],
   controllers: [FilesController],
 })

@@ -9,6 +9,12 @@
       "buttons": [
         [
           {
+            "text": "ПРЯМОЙ ЭФИР 5/08",
+            "target": "webinar1"
+          }
+        ],
+        [
+          {
             "text": "\uD83C\uDF38 Клуб The Cycle",
             "target": "the-cycle"
           }
@@ -29,6 +35,22 @@
           {
             "text": "\uD83D\uDECE\uFE0F Запись на консультацию",
             "target": "consultation"
+          }
+        ]
+      ]
+    },
+    "webinar1": {
+      "text": [
+        "🎙 <b>Прямой эфир 05 августа</b>",
+        "",
+        "Нажмите кнопку ниже, чтобы записаться и получить ссылку на эфир в Telegram."
+      ],
+      "buttons": [
+        [
+          {
+            "text": "Записаться на эфир",
+            "action": "registerLiveEvent",
+            "eventSlug": "webinar1"
           }
         ]
       ]
@@ -280,6 +302,23 @@
         "requiresMessage": true
       }
     ]
+  },
+  "liveEvents": {
+    "webinar1": {
+      "title": "Прямой эфир",
+      "telegramUrl": "https://t.me/+S2XB1Sq_collZjRi",
+      "joinButtonText": "Перейти в Telegram",
+      "successMessage": [
+        "✅ Вы записаны на {{eventTitle}}.",
+        "",
+        "Ссылка на эфир в Telegram доступна по кнопке ниже."
+      ],
+      "alreadyRegisteredMessage": [
+        "✅ Вы уже записаны на {{eventTitle}}.",
+        "",
+        "Ссылка на эфир в Telegram доступна по кнопке ниже."
+      ]
+    }
   },
   "payment": {
     "activeIntro": [

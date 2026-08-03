@@ -10,6 +10,7 @@ export type TelegramUser = {
 export type TelegramChat = {
   id: number;
   type: string;
+  title?: string;
 };
 
 export type TelegramMessage = {

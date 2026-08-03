@@ -1,5 +1,6 @@
 import { DataSourceOptions } from 'typeorm';
 import { TelegramAttribution } from '../attribution/telegram-attribution.entity';
+import { LiveEventRegistration } from '../live-events/live-event-registration.entity';
 import { PaymentAttempt } from '../payments/payment-attempt.entity';
 import { Product } from '../products/product.entity';
 import { Subscription } from '../subscriptions/subscription.entity';
@@ -15,6 +16,7 @@ export const databaseEntities = [
   SupportRequest,
   UserActivityEvent,
   TelegramAttribution,
+  LiveEventRegistration,
 ];
 
 export function buildDataSourceOptions(

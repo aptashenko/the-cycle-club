@@ -2,12 +2,13 @@ import { Module } from '@nestjs/common';
 import { AdminTelegramApiService } from '../admin-bot/admin-telegram-api.service';
 import { BotFlowService } from '../bot/bot-flow.service';
 import { InviteLinksModule } from '../invite-links/invite-links.module';
+import { UsersModule } from '../users/users.module';
 import { CriticalErrorService } from './critical-error.service';
 import { TelegramApiService } from './telegram-api.service';
 import { NotificationService } from './notification.service';
 
 @Module({
-  imports: [InviteLinksModule],
+  imports: [InviteLinksModule, UsersModule],
   providers: [
     TelegramApiService,
     AdminTelegramApiService,

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { NotificationService } from '../notifications/notification.service';
@@ -6,9 +6,10 @@ import { TelegramApiService } from '../notifications/telegram-api.service';
 import { SubscriptionService } from '../subscriptions/subscription.service';
 
 @Injectable()
-export class SubscriptionExpirationJob {
+export class SubscriptionExpirationJob implements OnApplicationBootstrap {
   private readonly logger = new Logger(SubscriptionExpirationJob.name);
   private warnedMissingGroupChatId = false;
+  private isProcessing = false;
 
   constructor(
     private readonly config: ConfigService,
@@ -17,8 +18,26 @@ export class SubscriptionExpirationJob {
     private readonly telegram: TelegramApiService,
   ) {}
 
+  async onApplicationBootstrap() {
+    await this.expireSubscriptionsAndRemoveFromGroup();
+  }
+
   @Cron(CronExpression.EVERY_HOUR)
   async expireSubscriptionsAndRemoveFromGroup() {
+    if (this.isProcessing) {
+      this.logger.warn('Subscription expiration job is already running');
+      return;
+    }
+
+    this.isProcessing = true;
+    try {
+      await this.processExpiredSubscriptions();
+    } finally {
+      this.isProcessing = false;
+    }
+  }
+
+  private async processExpiredSubscriptions() {
     const groupChatId = this.config.get<string>('CLOSED_GROUP_CHAT_ID');
     if (!groupChatId) {
       if (!this.warnedMissingGroupChatId) {
@@ -40,8 +59,16 @@ export class SubscriptionExpirationJob {
         subscription.user.telegramId,
       );
 
-      if (response.ok || this.isAlreadyOutsideGroup(response.description)) {
+      const wasAlreadyOutsideGroup = this.isAlreadyOutsideGroup(
+        response.description,
+      );
+
+      if (response.ok || wasAlreadyOutsideGroup) {
         await this.subscriptions.markExpired(subscription);
+        await this.notifications.notifyUserRemovedFromClosedGroup(
+          subscription,
+          wasAlreadyOutsideGroup,
+        );
         await this.notifications.notifySubscriptionExpired(subscription);
         expired += 1;
         continue;

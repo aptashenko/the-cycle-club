@@ -165,6 +165,16 @@ export class TelegramApiService {
     return data.result ?? [];
   }
 
+  isBotBlockedByUser(response: TelegramResponse<unknown>): boolean {
+    return (
+      !response.ok &&
+      (response.description
+        ?.toLowerCase()
+        .includes('bot was blocked by the user') ??
+        false)
+    );
+  }
+
   private async requestForm<T = unknown>(
     method: string,
     body: FormData,
@@ -180,9 +190,7 @@ export class TelegramApiService {
     const data = (await response.json()) as TelegramResponse<T>;
 
     if (!response.ok || !data.ok) {
-      this.logger.error(
-        `Telegram ${method} failed: ${response.status} ${data.description ?? ''}`,
-      );
+      this.logger.error(this.formatError(method, response.status, data, body));
     }
 
     return data;
@@ -205,7 +213,7 @@ export class TelegramApiService {
 
     if (!response.ok || !data.ok) {
       this.logger.error(
-        `Telegram ${method} failed: ${response.status} ${data.description ?? ''}`,
+        this.formatError(method, response.status, data, payload),
       );
     }
 
@@ -228,5 +236,35 @@ export class TelegramApiService {
     }
 
     return 'application/octet-stream';
+  }
+
+  private formatError(
+    method: string,
+    status: number,
+    data: TelegramResponse<unknown>,
+    payload: FormData | Record<string, unknown>,
+  ): string {
+    const chatId = this.getPayloadValue(payload, 'chat_id');
+    const userId = this.getPayloadValue(payload, 'user_id');
+    const identifiers = [
+      chatId !== undefined ? `chat_id=${chatId}` : undefined,
+      userId !== undefined ? `user_id=${userId}` : undefined,
+    ]
+      .filter(Boolean)
+      .join(', ');
+    const suffix = identifiers ? ` (${identifiers})` : '';
+
+    return `Telegram ${method} failed${suffix}: ${status} ${data.description ?? ''}`;
+  }
+
+  private getPayloadValue(
+    payload: FormData | Record<string, unknown>,
+    key: string,
+  ): unknown {
+    if (payload instanceof FormData) {
+      return payload.get(key) ?? undefined;
+    }
+
+    return payload[key];
   }
 }

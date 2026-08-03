@@ -1,5 +1,6 @@
 import { ProductType } from '../common/enums';
 import { AttributionService } from '../attribution/attribution.service';
+import { LiveEventsService } from '../live-events/live-events.service';
 import { NotificationService } from '../notifications/notification.service';
 import { PaymentService } from '../payments/payment.service';
 import { ProductService } from '../products/product.service';
@@ -31,6 +32,12 @@ describe('BotService support flow', () => {
     const support = {
       create: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<SupportService>;
+    const liveEvents = {
+      register: jest.fn().mockResolvedValue({
+        registration: { id: 'registration-id' },
+        created: true,
+      }),
+    } as unknown as jest.Mocked<LiveEventsService>;
     const activity = {
       track: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<UserActivityService>;
@@ -50,6 +57,7 @@ describe('BotService support flow', () => {
       {} as PaymentService,
       notifications,
       support,
+      liveEvents,
       activity,
       attribution,
       flow,
@@ -59,6 +67,7 @@ describe('BotService support flow', () => {
       service,
       telegram,
       support,
+      liveEvents,
       activity,
       notifications,
       attribution,
@@ -83,6 +92,23 @@ describe('BotService support flow', () => {
       'abc123_X-y',
       user,
     );
+  });
+
+  it('ignores messages from group chats', async () => {
+    const { service, telegram, activity } = buildService();
+
+    await service.handleUpdate({
+      update_id: 1,
+      message: {
+        message_id: 11,
+        from: { id: 123456, first_name: 'Jane' },
+        chat: { id: -100123456, type: 'supergroup', title: 'Closed chat' },
+        text: 'Любое сообщение в закрытом чате',
+      },
+    });
+
+    expect(activity.track).not.toHaveBeenCalled();
+    expect(telegram.sendMessage).not.toHaveBeenCalled();
   });
 
   it('asks for a message after selecting other support topic', async () => {
@@ -151,6 +177,48 @@ describe('BotService support flow', () => {
     );
   });
 
+  it('registers user for free live event from callback', async () => {
+    const { service, telegram, liveEvents, activity } = buildService();
+
+    await service.handleUpdate({
+      update_id: 1,
+      callback_query: {
+        id: 'callback-id',
+        from: { id: 123456, first_name: 'Jane' },
+        message: {
+          message_id: 10,
+          chat: { id: 123456, type: 'private' },
+        },
+        data: 'live-event:register:webinar1',
+      },
+    });
+
+    expect(liveEvents.register).toHaveBeenCalledWith(user, 'webinar1');
+    expect(activity.track).toHaveBeenCalledWith(
+      user,
+      'live_event',
+      'live_event_registered',
+      {
+        registrationId: 'registration-id',
+        eventSlug: 'webinar1',
+      },
+    );
+    expect(telegram.sendMessage).toHaveBeenLastCalledWith(
+      123456,
+      expect.stringContaining('Вы записаны'),
+      {
+        inline_keyboard: [
+          [
+            {
+              text: 'Перейти в Telegram',
+              url: 'https://t.me/+S2XB1Sq_collZjRi',
+            },
+          ],
+        ],
+      },
+    );
+  });
+
   it('opens included material for active The Cycle subscribers without payment', async () => {
     const telegram = {
       answerCallbackQuery: jest.fn().mockResolvedValue(undefined),
@@ -196,6 +264,9 @@ describe('BotService support flow', () => {
     const support = {
       create: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<SupportService>;
+    const liveEvents = {
+      register: jest.fn(),
+    } as unknown as jest.Mocked<LiveEventsService>;
     const activity = {
       track: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<UserActivityService>;
@@ -211,6 +282,7 @@ describe('BotService support flow', () => {
       payments,
       notifications,
       support,
+      liveEvents,
       activity,
       attribution,
       new BotFlowService(),
