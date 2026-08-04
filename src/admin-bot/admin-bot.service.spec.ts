@@ -140,12 +140,17 @@ function createService() {
         return '-1004456845123';
       }
 
+      if (key === 'CLOSED_GROUP_CHAT_ID') {
+        return '-1001234567890';
+      }
+
       return defaultValue;
     }),
   } as unknown as ConfigService;
   const users = {
     count: jest.fn().mockResolvedValue(1),
     findOne: jest.fn().mockResolvedValue(null),
+    save: jest.fn((user: User) => Promise.resolve(user)),
     createQueryBuilder: jest.fn(() => ({
       where: jest.fn().mockReturnThis(),
       getOne: jest.fn().mockResolvedValue(null),
@@ -169,16 +174,37 @@ function createService() {
     findOne: jest.fn().mockResolvedValue(supportRequest),
   } as unknown as jest.Mocked<Repository<SupportRequest>>;
   const products = {
-    findOne: jest.fn().mockResolvedValue({
-      slug: 'marathon-4',
-      title: 'Марафон по детоксу - 4 поток',
-      price: '1499.00',
-      currency: 'UAH',
-      isActive: true,
+    findOne: jest.fn((options?: { where?: { slug?: string } }) => {
+      if (options?.where?.slug === 'the-cycle') {
+        return Promise.resolve({
+          id: 'the-cycle-product-id',
+          slug: 'the-cycle',
+          title: 'The Cycle',
+          price: '899.00',
+          currency: 'UAH',
+          isActive: true,
+        });
+      }
+
+      return Promise.resolve({
+        slug: 'marathon-4',
+        title: 'Марафон по детоксу - 4 поток',
+        price: '1499.00',
+        currency: 'UAH',
+        isActive: true,
+      });
     }),
   } as unknown as jest.Mocked<Repository<Product>>;
   const subscriptions = {
     count: jest.fn().mockResolvedValue(0),
+    findOne: jest.fn().mockResolvedValue(null),
+    create: jest.fn((subscription: Partial<Subscription>) => subscription),
+    save: jest.fn((subscription: Subscription) =>
+      Promise.resolve({
+        ...subscription,
+        id: subscription.id ?? 'subscription-id',
+      }),
+    ),
   } as unknown as jest.Mocked<Repository<Subscription>>;
   const payments = {
     count: jest.fn().mockResolvedValue(0),
@@ -365,6 +391,59 @@ describe('AdminBotService', () => {
           [{ text: 'Открыть ссылку', url: 'https://t.me/+singleUse' }],
         ],
       },
+    );
+  });
+
+  it('sends a single-use closed group invite when granting The Cycle subscription', async () => {
+    const {
+      service,
+      adminTelegram,
+      mainTelegram,
+      inviteLinks,
+      subscriptions,
+      users,
+    } = createService();
+    const user = {
+      id: 'user-id',
+      telegramId: '987654321',
+      username: 'client_user',
+      firstName: 'Client',
+      membershipStatus: 'none',
+    } as User;
+    const getOne = jest.fn().mockResolvedValue(user);
+    const where = jest.fn().mockReturnValue({ getOne });
+    jest.spyOn(users, 'createQueryBuilder').mockReturnValue({
+      where,
+    } as unknown as ReturnType<Repository<User>['createQueryBuilder']>);
+
+    await service.handleUpdate(adminMessage('/grant_subscription'));
+    await service.handleUpdate(adminMessage('@client_user'));
+    await service.handleUpdate(adminMessage('31.12.2026'));
+
+    expect(subscriptions.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-id',
+        productId: 'the-cycle-product-id',
+        status: 'active',
+        expiresAt: expect.any(Date),
+      }),
+    );
+    expect(inviteLinks.createSingleUseInviteLink).toHaveBeenCalledWith({
+      chatId: '-1001234567890',
+      name: expect.stringMatching(/^the-cycle:grant:987654321:\d+$/),
+    });
+    expect(mainTelegram.sendMessage).toHaveBeenCalledWith(
+      '987654321',
+      expect.stringContaining('Доступ к The Cycle открыт'),
+      {
+        inline_keyboard: [
+          [{ text: 'Перейти в клуб ✅', url: 'https://t.me/+singleUse' }],
+        ],
+      },
+    );
+    expect(adminTelegram.sendMessage).toHaveBeenLastCalledWith(
+      123,
+      expect.stringContaining('Invite: sent to user'),
     );
   });
 
