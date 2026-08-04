@@ -346,7 +346,8 @@ Then it:
 
 Set `CLOSED_GROUP_CHAT_ID` to the closed Telegram group chat ID.
 
-The main bot from `TELEGRAM_BOT_TOKEN` must be added to that group as an admin with permission to ban users.
+The main bot from `TELEGRAM_BOT_TOKEN` must be added to that group as an admin
+with permission to ban users and create invite links.
 
 Every hour, the app finds active subscriptions whose `expires_at` is in the past. For each expired subscription it:
 
@@ -471,7 +472,8 @@ commands that require a Telegram ID.
 2. Send the subscription end date, for example `31.12.2026` or `2026-12-31`.
 
 The command grants access to the `the-cycle` subscription product until the
-given date.
+given date. After access is granted, the main bot creates a single-use invite
+link for `CLOSED_GROUP_CHAT_ID` and sends it to the user.
 
 `/broadcast` starts a text broadcast from the main bot:
 

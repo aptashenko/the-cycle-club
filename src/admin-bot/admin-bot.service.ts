@@ -32,6 +32,7 @@ const MARATHON_PRODUCT_SLUG_PREFIX = 'marathon-';
 const MARATHON_FLOW_ACTION_PREFIX = 'marathon:';
 const MARATHON_CHANNEL_CHAT_ID = 'MARATHON_CHANNEL_CHAT_ID';
 const MARATHON_INVITE_EXPIRES_IN_SECONDS = 'MARATHON_INVITE_EXPIRES_IN_SECONDS';
+const CLOSED_GROUP_CHAT_ID = 'CLOSED_GROUP_CHAT_ID';
 const BROADCAST_BATCH_SIZE = 100;
 const BROADCAST_SEND_DELAY_MS = 50;
 const BROADCAST_CONFIRM_BUTTON = '✅ Подтвердить рассылку';
@@ -110,6 +111,20 @@ type BroadcastButton = UrlBroadcastButton | CallbackBroadcastButton;
 type SupportReplySession = {
   requestId: string;
 };
+
+type InviteDeliveryResult =
+  | {
+      status: 'sent';
+      inviteLink: string;
+    }
+  | {
+      status: 'skipped';
+      reason: string;
+    }
+  | {
+      status: 'failed';
+      reason: string;
+    };
 
 type AdminMenuContext =
   | {
@@ -1111,6 +1126,11 @@ export class AdminBotService {
     }
 
     const subscription = await this.grantSubscription(user, product, expiresAt);
+    const inviteDelivery = await this.sendGrantedSubscriptionInvite(
+      user,
+      product,
+      subscription,
+    );
     this.grantSubscriptionSessions.delete(String(chatId));
 
     await this.telegram.sendMessage(
@@ -1123,8 +1143,75 @@ export class AdminBotService {
         `Product: ${this.escape(product.title)}`,
         `Status: ${this.escape(subscription.status)}`,
         `Expires: ${this.formatDate(subscription.expiresAt)}`,
+        '',
+        this.formatInviteDeliveryResult(inviteDelivery),
       ].join('\n'),
     );
+  }
+
+  private async sendGrantedSubscriptionInvite(
+    user: User,
+    product: Product,
+    subscription: Subscription,
+  ): Promise<InviteDeliveryResult> {
+    const groupChatId = this.config.get<string>(CLOSED_GROUP_CHAT_ID);
+    if (!groupChatId) {
+      return {
+        status: 'skipped',
+        reason: `${CLOSED_GROUP_CHAT_ID} is not configured`,
+      };
+    }
+
+    try {
+      const invite = await this.inviteLinks.createSingleUseInviteLink({
+        chatId: groupChatId,
+        name: this.buildGrantedSubscriptionInviteLinkName(user),
+      });
+
+      const response = (await this.mainTelegram.sendMessage(
+        user.telegramId,
+        [
+          'Доступ к The Cycle открыт ✅',
+          '',
+          `Продукт: ${this.escape(product.title)}`,
+          `Подписка активна до ${this.formatDate(subscription.expiresAt)}`,
+          '',
+          'Ссылка индивидуальная и рассчитана на одно вступление.',
+        ].join('\n'),
+        {
+          inline_keyboard: [
+            [
+              {
+                text: 'Перейти в клуб ✅',
+                url: invite.inviteLink,
+              },
+            ],
+          ],
+        },
+      )) as { ok: boolean; description?: string };
+
+      if (!response.ok) {
+        return {
+          status: 'failed',
+          reason: response.description ?? 'Telegram sendMessage failed',
+        };
+      }
+
+      return { status: 'sent', inviteLink: invite.inviteLink };
+    } catch (error) {
+      return {
+        status: 'failed',
+        reason: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  private formatInviteDeliveryResult(result: InviteDeliveryResult) {
+    if (result.status === 'sent') {
+      return 'Invite: sent to user';
+    }
+
+    return `Invite: ${result.status} - ${this.escape(result.reason)}`;
   }
 
   private async grantSubscription(
@@ -1525,6 +1612,10 @@ export class AdminBotService {
 
   private buildAdminInviteLinkName(productSlug: string) {
     return `${productSlug}:admin:${Date.now()}`;
+  }
+
+  private buildGrantedSubscriptionInviteLinkName(user: User) {
+    return `${GRANT_SUBSCRIPTION_PRODUCT_SLUG}:grant:${user.telegramId}:${Date.now()}`;
   }
 
   private async handleBroadcastStep(
