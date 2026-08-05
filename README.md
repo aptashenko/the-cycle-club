@@ -67,6 +67,7 @@ ADMIN_TELEGRAM_BOT_TOKEN=your_admin_bot_token
 MANAGER_TELEGRAM_ID=your_telegram_id
 MARATHON_CHANNEL_CHAT_ID=
 MARATHON_INVITE_EXPIRES_IN_SECONDS=
+KEYWORD_RESPONSE_WORD=
 PORT=3000
 ```
 
@@ -123,6 +124,11 @@ src/bot/bot-flow.json
 ```
 
 The config controls screen text, inline buttons, reply keyboard labels, support topics, payment prompt copy, and subscription messages.
+
+Set `KEYWORD_RESPONSE_WORD` to enable an exact private-message keyword response.
+The response text is configured in `keywordResponse.message` inside
+`src/bot/bot-flow.json`. Local files from the `files` directory can be sent
+with `keywordResponse.documentFiles`.
 
 Screens can send local images from the `files` directory before the inline
 buttons. Use `photoFile` for one image or `photoFiles` for several images:

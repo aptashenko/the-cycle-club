@@ -163,6 +163,35 @@ export class TelegramApiService {
     return this.requestForm('sendVideoNote', form);
   }
 
+  async sendDocumentFile(
+    chatId: string | number,
+    documentPath: string,
+    filename: string,
+    replyMarkup?: TelegramMarkup,
+    caption?: string,
+  ) {
+    const form = new FormData();
+    form.set('chat_id', String(chatId));
+    form.set(
+      'document',
+      new Blob([readFileSync(documentPath)], {
+        type: this.getDocumentContentType(filename),
+      }),
+      filename,
+    );
+
+    if (caption) {
+      form.set('caption', caption);
+      form.set('parse_mode', 'HTML');
+    }
+
+    if (replyMarkup) {
+      form.set('reply_markup', JSON.stringify(replyMarkup));
+    }
+
+    return this.requestForm('sendDocument', form);
+  }
+
   async answerCallbackQuery(callbackQueryId: string, text?: string) {
     return this.request('answerCallbackQuery', {
       callback_query_id: callbackQueryId,
@@ -290,6 +319,14 @@ export class TelegramApiService {
 
     if (extension === '.webp') {
       return 'image/webp';
+    }
+
+    return 'application/octet-stream';
+  }
+
+  private getDocumentContentType(filename: string): string {
+    if (extname(filename).toLowerCase() === '.pdf') {
+      return 'application/pdf';
     }
 
     return 'application/octet-stream';

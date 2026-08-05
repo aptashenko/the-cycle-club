@@ -141,4 +141,13 @@ describe('BotFlowService', () => {
       service.getDownloadMessage({ productTitle: 'Практичная методичка' }),
     ).toContain('«Практичная методичка»');
   });
+
+  it('loads keyword response message from config', () => {
+    expect(service.getKeywordResponseMessage()).toContain(
+      'Текст ответа на ключевое слово.',
+    );
+    expect(service.getKeywordResponseDocumentFiles()).toEqual([
+      'sekrety_biohaking.pdf',
+    ]);
+  });
 });

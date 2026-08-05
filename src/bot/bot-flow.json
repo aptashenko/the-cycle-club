@@ -364,5 +364,13 @@
     ],
     "expiresAtPrefix": "Активна до:",
     "noExpirationMessage": "Активна без даты окончания"
+  },
+  "keywordResponse": {
+    "message": [
+      "Текст ответа на ключевое слово."
+    ],
+    "documentFiles": [
+      "sekrety_biohaking.pdf"
+    ]
   }
 }

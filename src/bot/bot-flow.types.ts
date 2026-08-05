@@ -72,6 +72,11 @@ export type SubscriptionsConfig = {
   noExpirationMessage: string;
 };
 
+export type KeywordResponseConfig = {
+  message: string[];
+  documentFiles?: string[];
+};
+
 export type BotFlowConfig = {
   startScreen: string;
   screens: Record<string, FlowScreen>;
@@ -80,4 +85,5 @@ export type BotFlowConfig = {
   liveEvents: Record<string, LiveEventConfig>;
   payment: PaymentConfig;
   subscriptions: SubscriptionsConfig;
+  keywordResponse: KeywordResponseConfig;
 };
