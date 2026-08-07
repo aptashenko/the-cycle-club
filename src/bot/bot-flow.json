@@ -9,12 +9,6 @@
       "buttons": [
         [
           {
-            "text": "ПРЯМОЙ ЭФИР 5/08",
-            "target": "webinar1"
-          }
-        ],
-        [
-          {
             "text": "\uD83C\uDF38 Клуб The Cycle",
             "target": "the-cycle"
           }
