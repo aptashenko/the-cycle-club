@@ -187,6 +187,7 @@ function createService() {
       }
 
       return Promise.resolve({
+        id: 'marathon-product-id',
         slug: 'marathon-4',
         title: 'Марафон по детоксу - 4 поток',
         price: '1499.00',
@@ -194,6 +195,24 @@ function createService() {
         isActive: true,
       });
     }),
+    find: jest.fn().mockResolvedValue([
+      {
+        id: 'the-cycle-product-id',
+        slug: 'the-cycle',
+        title: 'The Cycle',
+        price: '899.00',
+        currency: 'UAH',
+        isActive: true,
+      },
+      {
+        id: 'marathon-product-id',
+        slug: 'marathon-4',
+        title: 'Марафон по детоксу - 4 поток',
+        price: '1499.00',
+        currency: 'UAH',
+        isActive: true,
+      },
+    ]),
   } as unknown as jest.Mocked<Repository<Product>>;
   const subscriptions = {
     count: jest.fn().mockResolvedValue(0),
@@ -321,6 +340,7 @@ describe('AdminBotService', () => {
           [{ text: '🏁 Марафон' }],
           [{ text: '👥 Пользователи' }],
           [{ text: '💬 Коммуникации' }],
+          [{ text: '💳 Рассылка с оплатой' }],
         ]),
         resize_keyboard: true,
       }),
@@ -711,6 +731,57 @@ describe('AdminBotService', () => {
       {
         text: 'Оплатить марафон',
         callbackData: 'payment:start:marathon-4',
+      },
+      undefined,
+      1,
+    );
+  });
+
+  it('creates a product payment broadcast with a WayForPay callback button', async () => {
+    const { service, adminTelegram } = createService();
+    const privateService = service as unknown as AdminBotServicePrivate;
+    const runBroadcast = jest
+      .spyOn(privateService, 'runBroadcast')
+      .mockResolvedValue(undefined);
+
+    await service.handleUpdate(adminMessage('/broadcast_payment'));
+    await service.handleUpdate(
+      adminMessage('The Cycle (the-cycle) - 899.00 UAH'),
+    );
+    await service.handleUpdate(adminMessage('Текст рассылки про клуб'));
+    await service.handleUpdate(adminMessage('Без медиа'));
+    await service.handleUpdate(adminMessage('Стандартная кнопка оплаты'));
+    await service.handleUpdate(adminMessage('✅ Подтвердить рассылку'));
+
+    expect(adminTelegram.sendMessage).toHaveBeenCalledWith(
+      123,
+      expect.stringContaining('Choose a product for the payment button.'),
+      expect.objectContaining({
+        keyboard: expect.arrayContaining([
+          [{ text: 'The Cycle (the-cycle) - 899.00 UAH' }],
+        ]),
+      }),
+    );
+    expect(adminTelegram.sendMessage).toHaveBeenCalledWith(
+      123,
+      expect.stringContaining('Callback: <code>payment:start:the-cycle</code>'),
+      {
+        inline_keyboard: [
+          [
+            {
+              text: 'Оплатить 899.00 UAH',
+              callback_data: 'payment:start:the-cycle',
+            },
+          ],
+        ],
+      },
+    );
+    expect(runBroadcast).toHaveBeenCalledWith(
+      123,
+      'Текст рассылки про клуб',
+      {
+        text: 'Оплатить 899.00 UAH',
+        callbackData: 'payment:start:the-cycle',
       },
       undefined,
       1,

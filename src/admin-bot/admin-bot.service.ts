@@ -46,6 +46,7 @@ const BROADCAST_VIDEO_NOTE_BUTTON = '🎥 Кружочек';
 const BROADCAST_PHOTO_BUTTON = '🖼 Фото';
 const MARATHON_DEFAULT_TEXT_BUTTON = 'Стандартный текст';
 const MARATHON_DEFAULT_BUTTON_TEXT_BUTTON = 'Стандартная кнопка';
+const PAYMENT_BROADCAST_DEFAULT_BUTTON_TEXT_BUTTON = 'Стандартная кнопка оплаты';
 const ADMIN_MENU_BUTTON = '☰ Меню';
 const ADMIN_STATS_BUTTON = '📊 Статистика';
 const ADMIN_MARATHON_MENU_BUTTON = '🏁 Марафон';
@@ -63,6 +64,7 @@ const ADMIN_SUBSCRIPTIONS_BUTTON = '🎟 Подписки';
 const ADMIN_ACTIVITY_BUTTON = '🧭 Активность';
 const ADMIN_SUPPORT_BUTTON = '💬 Поддержка';
 const ADMIN_BROADCAST_BUTTON = '📣 Рассылка';
+const ADMIN_PAYMENT_BROADCAST_BUTTON = '💳 Рассылка с оплатой';
 
 type GrantSubscriptionSession =
   | {
@@ -83,6 +85,29 @@ type BroadcastSession =
   | {
       step: 'marathonButtonText';
       text: string;
+    }
+  | {
+      step: 'paymentProductChoice';
+    }
+  | {
+      step: 'paymentMessage';
+      productSlug: string;
+    }
+  | {
+      step: 'paymentMediaChoice';
+      productSlug: string;
+      text: string;
+    }
+  | {
+      step: 'paymentVideoNoteKey' | 'paymentPhotoKey';
+      productSlug: string;
+      text: string;
+    }
+  | {
+      step: 'paymentButtonText';
+      productSlug: string;
+      text: string;
+      media?: BroadcastMedia;
     }
   | {
       step: 'buttonText';
@@ -418,6 +443,11 @@ export class AdminBotService {
       return;
     }
 
+    if (command === '/broadcast_payment') {
+      await this.startPaymentBroadcast(chatId);
+      return;
+    }
+
     if (command === '/broadcasts') {
       await this.sendBroadcasts(chatId);
       return;
@@ -611,6 +641,11 @@ export class AdminBotService {
       return true;
     }
 
+    if (text === ADMIN_PAYMENT_BROADCAST_BUTTON) {
+      await this.startPaymentBroadcast(chatId);
+      return true;
+    }
+
     if (text === ADMIN_SINGLE_USE_INVITE_BUTTON) {
       if (context?.section === 'marathonFlow') {
         await this.sendSingleUseInviteLink(chatId, context.productSlug);
@@ -654,6 +689,7 @@ export class AdminBotService {
         '/subscriptions &lt;telegram_id_or_username&gt; - user subscriptions',
         '/grant_subscription - grant The Cycle subscription by username',
         '/broadcast - send a text broadcast from the main bot',
+        '/broadcast_payment - send a broadcast with a product payment button',
         '/broadcast_marathon - send marathon-4 payment broadcast',
         '/broadcasts - list recent broadcasts',
         '/delete_broadcast &lt;id&gt; - delete a broadcast from users',
@@ -731,6 +767,11 @@ export class AdminBotService {
 
     if (action === 'broadcast') {
       await this.startBroadcast(chatId);
+      return;
+    }
+
+    if (action === 'broadcast_payment') {
+      await this.startPaymentBroadcast(chatId);
       return;
     }
 
@@ -1365,6 +1406,7 @@ export class AdminBotService {
         [{ text: ADMIN_MARATHON_MENU_BUTTON }],
         [{ text: ADMIN_USERS_MENU_BUTTON }],
         [{ text: ADMIN_COMMUNICATION_MENU_BUTTON }],
+        [{ text: ADMIN_PAYMENT_BROADCAST_BUTTON }],
         [{ text: ADMIN_GRANT_SUBSCRIPTION_BUTTON }],
         [{ text: ADMIN_MENU_BUTTON }],
       ],
@@ -1423,6 +1465,7 @@ export class AdminBotService {
       keyboard: [
         [{ text: ADMIN_SUPPORT_BUTTON }],
         [{ text: ADMIN_BROADCAST_BUTTON }],
+        [{ text: ADMIN_PAYMENT_BROADCAST_BUTTON }],
         [{ text: ADMIN_BACK_BUTTON }],
       ],
       resize_keyboard: true,
@@ -1495,6 +1538,32 @@ export class AdminBotService {
     return {
       keyboard: [
         [{ text: MARATHON_DEFAULT_BUTTON_TEXT_BUTTON }],
+        [{ text: BROADCAST_CANCEL_BUTTON }],
+      ],
+      resize_keyboard: true,
+      one_time_keyboard: false,
+      selective: true,
+    };
+  }
+
+  private getPaymentBroadcastProductKeyboardMarkup(products: Product[]) {
+    return {
+      keyboard: [
+        ...products.map((product) => [
+          { text: this.formatPaymentBroadcastProductChoice(product) },
+        ]),
+        [{ text: BROADCAST_CANCEL_BUTTON }],
+      ],
+      resize_keyboard: true,
+      one_time_keyboard: false,
+      selective: true,
+    };
+  }
+
+  private getPaymentBroadcastButtonTextKeyboardMarkup() {
+    return {
+      keyboard: [
+        [{ text: PAYMENT_BROADCAST_DEFAULT_BUTTON_TEXT_BUTTON }],
         [{ text: BROADCAST_CANCEL_BUTTON }],
       ],
       resize_keyboard: true,
@@ -1797,6 +1866,139 @@ export class AdminBotService {
     );
   }
 
+  private async startPaymentBroadcast(chatId: string | number) {
+    if (this.broadcastInProgress) {
+      await this.telegram.sendMessage(
+        chatId,
+        'Another broadcast is already running. Try again later.',
+      );
+      return;
+    }
+
+    const products = await this.getPaymentBroadcastProducts();
+    if (products.length === 0) {
+      await this.telegram.sendMessage(chatId, 'No active products found.');
+      return;
+    }
+
+    this.broadcastSessions.set(String(chatId), {
+      step: 'paymentProductChoice',
+    });
+
+    await this.telegram.sendMessage(
+      chatId,
+      [
+        '<b>Payment broadcast</b>',
+        '',
+        'Choose a product for the payment button.',
+        'The user will receive a payment callback button, and the main bot will create an individual WayForPay attempt after click.',
+        `Use ${BROADCAST_CANCEL_BUTTON} or /cancel to cancel.`,
+      ].join('\n'),
+      this.getPaymentBroadcastProductKeyboardMarkup(products),
+    );
+  }
+
+  private async getPaymentBroadcastProducts() {
+    const products = await this.products.find({
+      where: { isActive: true },
+      order: { createdAt: 'ASC' },
+    });
+
+    return products.sort((a, b) => a.slug.localeCompare(b.slug));
+  }
+
+  private async askPaymentBroadcastText(
+    chatId: string | number,
+    product: Product,
+  ) {
+    this.broadcastSessions.set(String(chatId), {
+      step: 'paymentMessage',
+      productSlug: product.slug,
+    });
+
+    await this.telegram.sendMessage(
+      chatId,
+      [
+        `<b>Payment broadcast: ${this.escape(product.title)}</b>`,
+        '',
+        `Price: ${this.escape(product.price)} ${this.escape(product.currency)}`,
+        '',
+        'Send the broadcast text.',
+      ].join('\n'),
+      this.getBroadcastTextKeyboardMarkup(),
+    );
+  }
+
+  private async askPaymentBroadcastButtonText(
+    chatId: string | number,
+    productSlug: string,
+    text: string,
+    media?: BroadcastMedia,
+  ) {
+    const product = await this.products.findOne({
+      where: { slug: productSlug, isActive: true },
+    });
+
+    if (!product) {
+      this.broadcastSessions.delete(String(chatId));
+      await this.telegram.sendMessage(
+        chatId,
+        'Product is no longer available.',
+        this.getRemoveKeyboardMarkup(),
+      );
+      return;
+    }
+
+    this.broadcastSessions.set(String(chatId), {
+      step: 'paymentButtonText',
+      productSlug,
+      text,
+      media,
+    });
+
+    await this.telegram.sendMessage(
+      chatId,
+      [
+        '<b>Payment button</b>',
+        '',
+        'Send the button text.',
+        `Tap ${PAYMENT_BROADCAST_DEFAULT_BUTTON_TEXT_BUTTON} to use: ${this.escape(
+          this.getDefaultPaymentBroadcastButtonText(product),
+        )}`,
+      ].join('\n'),
+      this.getPaymentBroadcastButtonTextKeyboardMarkup(),
+    );
+  }
+
+  private async preparePaymentBroadcastPreview(
+    chatId: string | number,
+    productSlug: string,
+    text: string,
+    media: BroadcastMedia | undefined,
+    buttonText?: string,
+  ) {
+    const product = await this.products.findOne({
+      where: { slug: productSlug, isActive: true },
+    });
+
+    if (!product) {
+      this.broadcastSessions.delete(String(chatId));
+      await this.telegram.sendMessage(
+        chatId,
+        'Product is no longer available.',
+        this.getRemoveKeyboardMarkup(),
+      );
+      return;
+    }
+
+    await this.prepareBroadcastPreview(
+      chatId,
+      text,
+      this.getPaymentBroadcastButton(product, buttonText),
+      media,
+    );
+  }
+
   private async prepareMarathonBroadcastPreview(
     chatId: string | number,
     text: string,
@@ -1959,6 +2161,168 @@ export class AdminBotService {
     command: string,
     session: BroadcastSession,
   ) {
+    if (session.step === 'paymentProductChoice') {
+      const products = await this.getPaymentBroadcastProducts();
+      const product = this.findPaymentBroadcastProductChoice(text, products);
+
+      if (!product) {
+        await this.telegram.sendMessage(
+          chatId,
+          'Choose a product from the keyboard.',
+          this.getPaymentBroadcastProductKeyboardMarkup(products),
+        );
+        return;
+      }
+
+      await this.askPaymentBroadcastText(chatId, product);
+      return;
+    }
+
+    if (session.step === 'paymentMessage') {
+      if (!text || text.startsWith('/')) {
+        await this.telegram.sendMessage(
+          chatId,
+          'Send a non-empty payment broadcast text or cancel the broadcast.',
+          this.getBroadcastTextKeyboardMarkup(),
+        );
+        return;
+      }
+
+      this.broadcastSessions.set(String(chatId), {
+        step: 'paymentMediaChoice',
+        productSlug: session.productSlug,
+        text,
+      });
+
+      await this.telegram.sendMessage(
+        chatId,
+        [
+          '<b>Payment broadcast media</b>',
+          '',
+          `Choose ${BROADCAST_PHOTO_BUTTON}, ${BROADCAST_VIDEO_NOTE_BUTTON}, or skip media.`,
+        ].join('\n'),
+        this.getBroadcastMediaKeyboardMarkup(),
+      );
+      return;
+    }
+
+    if (session.step === 'paymentMediaChoice') {
+      if (text === BROADCAST_SKIP_MEDIA_BUTTON) {
+        await this.askPaymentBroadcastButtonText(
+          chatId,
+          session.productSlug,
+          session.text,
+        );
+        return;
+      }
+
+      if (
+        text !== BROADCAST_VIDEO_NOTE_BUTTON &&
+        text !== BROADCAST_PHOTO_BUTTON
+      ) {
+        await this.telegram.sendMessage(
+          chatId,
+          'Choose broadcast media or skip it.',
+          this.getBroadcastMediaKeyboardMarkup(),
+        );
+        return;
+      }
+
+      const mediaType =
+        text === BROADCAST_PHOTO_BUTTON ? 'photo' : 'video_note';
+      const label = this.getMediaTypeLabel(mediaType);
+      const listCommand = mediaType === 'photo' ? '/photos' : '/video_notes';
+      this.broadcastSessions.set(String(chatId), {
+        step: mediaType === 'photo' ? 'paymentPhotoKey' : 'paymentVideoNoteKey',
+        productSlug: session.productSlug,
+        text: session.text,
+      });
+
+      await this.telegram.sendMessage(
+        chatId,
+        [
+          `<b>Payment broadcast ${label}</b>`,
+          '',
+          `Send saved ${label} key.`,
+          `Use <code>${listCommand}</code> to see saved keys.`,
+        ].join('\n'),
+        this.getBroadcastTextKeyboardMarkup(),
+      );
+      return;
+    }
+
+    if (
+      session.step === 'paymentVideoNoteKey' ||
+      session.step === 'paymentPhotoKey'
+    ) {
+      const type = session.step === 'paymentPhotoKey' ? 'photo' : 'video_note';
+      const label = this.getMediaTypeLabel(type);
+      const listCommand = type === 'photo' ? '/photos' : '/video_notes';
+      const key = this.normalizeMediaAssetKey(text);
+      if (!key) {
+        await this.telegram.sendMessage(
+          chatId,
+          `Send a valid ${label} key, or /cancel.`,
+          this.getBroadcastTextKeyboardMarkup(),
+        );
+        return;
+      }
+
+      const asset = await this.broadcastMediaAssets.findOne({
+        where: { type, key },
+      });
+      if (!asset) {
+        await this.telegram.sendMessage(
+          chatId,
+          `${this.capitalize(label)} <code>${this.escape(key)}</code> not found. Use <code>${listCommand}</code> or /cancel.`,
+          this.getBroadcastTextKeyboardMarkup(),
+        );
+        return;
+      }
+
+      await this.askPaymentBroadcastButtonText(
+        chatId,
+        session.productSlug,
+        session.text,
+        {
+          type,
+          assetId: asset.id,
+          key: asset.key,
+        },
+      );
+      return;
+    }
+
+    if (session.step === 'paymentButtonText') {
+      if (text === PAYMENT_BROADCAST_DEFAULT_BUTTON_TEXT_BUTTON) {
+        await this.preparePaymentBroadcastPreview(
+          chatId,
+          session.productSlug,
+          session.text,
+          session.media,
+        );
+        return;
+      }
+
+      if (!text || text.startsWith('/')) {
+        await this.telegram.sendMessage(
+          chatId,
+          'Send a non-empty payment button text or cancel the broadcast.',
+          this.getPaymentBroadcastButtonTextKeyboardMarkup(),
+        );
+        return;
+      }
+
+      await this.preparePaymentBroadcastPreview(
+        chatId,
+        session.productSlug,
+        session.text,
+        session.media,
+        text,
+      );
+      return;
+    }
+
     if (session.step === 'marathonMessage') {
       if (text === MARATHON_DEFAULT_TEXT_BUTTON) {
         await this.askMarathonBroadcastButtonText(
@@ -2895,6 +3259,39 @@ export class AdminBotService {
     } catch {
       return null;
     }
+  }
+
+  private formatPaymentBroadcastProductChoice(product: Product) {
+    return `${product.title} (${product.slug}) - ${product.price} ${product.currency}`;
+  }
+
+  private findPaymentBroadcastProductChoice(
+    value: string,
+    products: Product[],
+  ) {
+    const text = value.trim();
+    const slugMatch = text.match(/\(([^)]+)\)/);
+    const slug = slugMatch?.[1] ?? text;
+
+    return products.find(
+      (product) =>
+        product.slug === slug ||
+        this.formatPaymentBroadcastProductChoice(product) === text,
+    );
+  }
+
+  private getDefaultPaymentBroadcastButtonText(product: Product) {
+    return `Оплатить ${product.price} ${product.currency}`;
+  }
+
+  private getPaymentBroadcastButton(
+    product: Product,
+    buttonText?: string,
+  ): CallbackBroadcastButton {
+    return {
+      text: buttonText ?? this.getDefaultPaymentBroadcastButtonText(product),
+      callbackData: `${PAYMENT_CALLBACK_PREFIX}${product.slug}`,
+    };
   }
 
   private parseSubscriptionEndDate(value: string) {
