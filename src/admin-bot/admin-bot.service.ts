@@ -380,7 +380,13 @@ export class AdminBotService {
         return;
       }
 
-      await this.handleBroadcastStep(chatId, text, command, broadcastSession);
+      await this.handleBroadcastStep(
+        chatId,
+        text,
+        command,
+        message,
+        broadcastSession,
+      );
       return;
     }
 
@@ -1636,55 +1642,18 @@ export class AdminBotService {
     session: SaveMediaAssetSession,
   ) {
     const chatId = message.chat.id;
-    const mediaFile = this.getMessageMediaFile(message, session.type);
     const label = this.getMediaTypeLabel(session.type);
-    if (!mediaFile) {
-      await this.telegram.sendMessage(
-        chatId,
-        `Send a Telegram ${label}, or /cancel.`,
-      );
+    const result = await this.saveBroadcastMediaAssetFromMessage(
+      message,
+      session.type,
+      session.key,
+    );
+    if (!result.ok) {
+      await this.telegram.sendMessage(chatId, result.message);
       return;
     }
 
-    const fileResponse = await this.telegram.getFile(mediaFile.fileId);
-    const filePath = fileResponse.result?.file_path;
-    if (!fileResponse.ok || !filePath) {
-      await this.telegram.sendMessage(
-        chatId,
-        `Could not read ${label} file: ${this.escape(fileResponse.description ?? 'missing file path')}`,
-      );
-      return;
-    }
-
-    const fileData = await this.telegram.downloadFile(filePath);
-    if (!fileData) {
-      await this.telegram.sendMessage(chatId, `Could not download ${label}.`);
-      return;
-    }
-
-    let asset = await this.broadcastMediaAssets.findOne({
-      where: { key: session.key },
-    });
-
-    if (!asset) {
-      asset = this.broadcastMediaAssets.create({
-        type: session.type,
-        key: session.key,
-      });
-    }
-
-    asset.type = session.type;
-    asset.adminFileId = mediaFile.fileId;
-    asset.fileUniqueId = mediaFile.fileUniqueId ?? null;
-    asset.fileData = fileData;
-    asset.fileSize = mediaFile.fileSize ?? fileData.length;
-    asset.duration = mediaFile.duration ?? null;
-    asset.length = mediaFile.length ?? null;
-    asset.width = mediaFile.width ?? null;
-    asset.height = mediaFile.height ?? null;
-    asset.createdByTelegramId = String(message.from?.id ?? '');
-
-    await this.broadcastMediaAssets.save(asset);
+    const { asset } = result;
     this.saveMediaAssetSessions.delete(String(chatId));
 
     await this.telegram.sendMessage(
@@ -1699,9 +1668,74 @@ export class AdminBotService {
         ...(asset.width && asset.height
           ? [`Size: ${asset.width}x${asset.height}`]
           : []),
-        `Size: ${this.formatBytes(asset.fileSize ?? fileData.length)}`,
+        `Size: ${this.formatBytes(asset.fileSize ?? asset.fileData.length)}`,
       ].join('\n'),
     );
+  }
+
+  private async saveBroadcastMediaAssetFromMessage(
+    message: TelegramMessage,
+    type: BroadcastMediaAsset['type'],
+    key: string,
+  ): Promise<
+    | {
+        ok: true;
+        asset: BroadcastMediaAsset;
+      }
+    | {
+        ok: false;
+        message: string;
+      }
+  > {
+    const mediaFile = this.getMessageMediaFile(message, type);
+    const label = this.getMediaTypeLabel(type);
+    if (!mediaFile) {
+      return {
+        ok: false,
+        message: `Send a Telegram ${label}, or /cancel.`,
+      };
+    }
+
+    const fileResponse = await this.telegram.getFile(mediaFile.fileId);
+    const filePath = fileResponse.result?.file_path;
+    if (!fileResponse.ok || !filePath) {
+      return {
+        ok: false,
+        message: `Could not read ${label} file: ${this.escape(fileResponse.description ?? 'missing file path')}`,
+      };
+    }
+
+    const fileData = await this.telegram.downloadFile(filePath);
+    if (!fileData) {
+      return {
+        ok: false,
+        message: `Could not download ${label}.`,
+      };
+    }
+
+    let asset = await this.broadcastMediaAssets.findOne({
+      where: { key },
+    });
+
+    if (!asset) {
+      asset = this.broadcastMediaAssets.create({ type, key });
+    }
+
+    asset.type = type;
+    asset.adminFileId = mediaFile.fileId;
+    asset.fileUniqueId = mediaFile.fileUniqueId ?? null;
+    asset.fileData = fileData;
+    asset.fileSize = mediaFile.fileSize ?? fileData.length;
+    asset.duration = mediaFile.duration ?? null;
+    asset.length = mediaFile.length ?? null;
+    asset.width = mediaFile.width ?? null;
+    asset.height = mediaFile.height ?? null;
+    asset.createdByTelegramId = String(message.from?.id ?? '');
+
+    return {
+      ok: true,
+      asset: await this.broadcastMediaAssets.save(asset),
+    };
   }
 
   private getMessageMediaFile(
@@ -2159,6 +2193,7 @@ export class AdminBotService {
     chatId: string | number,
     text: string,
     command: string,
+    message: TelegramMessage,
     session: BroadcastSession,
   ) {
     if (session.step === 'paymentProductChoice') {
@@ -2243,7 +2278,9 @@ export class AdminBotService {
         [
           `<b>Payment broadcast ${label}</b>`,
           '',
-          `Send saved ${label} key.`,
+          mediaType === 'photo'
+            ? 'Send a saved photo key or upload a photo now.'
+            : `Send saved ${label} key.`,
           `Use <code>${listCommand}</code> to see saved keys.`,
         ].join('\n'),
         this.getBroadcastTextKeyboardMarkup(),
@@ -2258,6 +2295,31 @@ export class AdminBotService {
       const type = session.step === 'paymentPhotoKey' ? 'photo' : 'video_note';
       const label = this.getMediaTypeLabel(type);
       const listCommand = type === 'photo' ? '/photos' : '/video_notes';
+
+      if (type === 'photo' && message.photo?.length) {
+        const result = await this.saveBroadcastMediaAssetFromMessage(
+          message,
+          'photo',
+          this.buildAutoBroadcastMediaKey('photo'),
+        );
+        if (!result.ok) {
+          await this.telegram.sendMessage(chatId, result.message);
+          return;
+        }
+
+        await this.askPaymentBroadcastButtonText(
+          chatId,
+          session.productSlug,
+          session.text,
+          {
+            type,
+            assetId: result.asset.id,
+            key: result.asset.key,
+          },
+        );
+        return;
+      }
+
       const key = this.normalizeMediaAssetKey(text);
       if (!key) {
         await this.telegram.sendMessage(
@@ -2481,7 +2543,9 @@ export class AdminBotService {
         [
           `<b>Broadcast ${label}</b>`,
           '',
-          `Send saved ${label} key.`,
+          mediaType === 'photo'
+            ? 'Send a saved photo key or upload a photo now.'
+            : `Send saved ${label} key.`,
           `Use <code>${listCommand}</code> to see saved keys.`,
         ].join('\n'),
         this.getBroadcastTextKeyboardMarkup(),
@@ -2493,6 +2557,31 @@ export class AdminBotService {
       const type = session.step === 'photoKey' ? 'photo' : 'video_note';
       const label = this.getMediaTypeLabel(type);
       const listCommand = type === 'photo' ? '/photos' : '/video_notes';
+
+      if (type === 'photo' && message.photo?.length) {
+        const result = await this.saveBroadcastMediaAssetFromMessage(
+          message,
+          'photo',
+          this.buildAutoBroadcastMediaKey('photo'),
+        );
+        if (!result.ok) {
+          await this.telegram.sendMessage(chatId, result.message);
+          return;
+        }
+
+        await this.prepareBroadcastPreview(
+          chatId,
+          session.text,
+          session.button,
+          {
+            type,
+            assetId: result.asset.id,
+            key: result.asset.key,
+          },
+        );
+        return;
+      }
+
       const key = this.normalizeMediaAssetKey(text);
       if (!key) {
         await this.telegram.sendMessage(
@@ -3244,6 +3333,11 @@ export class AdminBotService {
     }
 
     return key;
+  }
+
+  private buildAutoBroadcastMediaKey(type: BroadcastMediaAsset['type']) {
+    const random = Math.random().toString(36).slice(2, 8);
+    return `broadcast_${type}_${Date.now()}_${random}`;
   }
 
   private normalizeBroadcastButtonUrl(value: string) {

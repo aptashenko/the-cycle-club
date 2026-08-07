@@ -646,6 +646,42 @@ describe('AdminBotService', () => {
     );
   });
 
+  it('accepts a direct photo upload while creating a broadcast', async () => {
+    const { service, adminTelegram, broadcastMediaAssets } = createService();
+    const privateService = service as unknown as AdminBotServicePrivate;
+    const runBroadcast = jest
+      .spyOn(privateService, 'runBroadcast')
+      .mockResolvedValue(undefined);
+
+    await service.handleUpdate(adminMessage('/broadcast'));
+    await service.handleUpdate(adminMessage('Hello with photo'));
+    await service.handleUpdate(adminMessage('Без кнопки'));
+    await service.handleUpdate(adminMessage('🖼 Фото'));
+    await service.handleUpdate(adminPhoto());
+    await service.handleUpdate(adminMessage('✅ Подтвердить рассылку'));
+
+    expect(adminTelegram.getFile).toHaveBeenCalledWith('photo-large-file-id');
+    expect(broadcastMediaAssets.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'photo',
+        key: expect.stringMatching(/^broadcast_photo_\d+_[a-z0-9]+$/),
+        adminFileId: 'photo-large-file-id',
+        fileData: Buffer.from('photo-bytes'),
+      }),
+    );
+    expect(runBroadcast).toHaveBeenCalledWith(
+      123,
+      'Hello with photo',
+      undefined,
+      {
+        type: 'photo',
+        assetId: 'media-asset-id',
+        key: expect.stringMatching(/^broadcast_photo_\d+_[a-z0-9]+$/),
+      },
+      1,
+    );
+  });
+
   it('starts a marathon payment broadcast with an inline callback button', async () => {
     const { service, adminTelegram } = createService();
     const privateService = service as unknown as AdminBotServicePrivate;
