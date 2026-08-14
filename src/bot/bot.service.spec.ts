@@ -273,42 +273,6 @@ describe('BotService support flow', () => {
     );
   });
 
-  it('tracks personal channel button clicks and sends the channel link', async () => {
-    const { service, telegram, activity } = buildService();
-
-    await service.handleUpdate({
-      update_id: 1,
-      callback_query: {
-        id: 'callback-id',
-        from: { id: 123456, first_name: 'Jane' },
-        message: {
-          message_id: 10,
-          chat: { id: 123456, type: 'private' },
-        },
-        data: 'tracked-link:personal-channel',
-      },
-    });
-
-    expect(activity.track).toHaveBeenCalledWith(
-      user,
-      'link',
-      'personal_channel_link_clicked',
-      {
-        trackingId: 'personal-channel',
-        url: 'https://t.me/+aCEPu2L_KVo4MjJi',
-      },
-    );
-    expect(telegram.sendMessage).toHaveBeenLastCalledWith(
-      123456,
-      'Ссылка доступна по кнопке ниже.',
-      {
-        inline_keyboard: [
-          [{ text: 'Перейти', url: 'https://t.me/+aCEPu2L_KVo4MjJi' }],
-        ],
-      },
-    );
-  });
-
   it('opens included material for active The Cycle subscribers without payment', async () => {
     const telegram = {
       answerCallbackQuery: jest.fn().mockResolvedValue(undefined),

@@ -51,8 +51,6 @@
         [
           {
             "text": "Перейти",
-            "action": "trackLinkClick",
-            "trackingId": "personal-channel",
             "url": "https://t.me/+aCEPu2L_KVo4MjJi"
           }
         ]

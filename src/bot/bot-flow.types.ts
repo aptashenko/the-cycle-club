@@ -8,14 +8,9 @@ export type FlowButton = {
   activeText?: string;
   target?: string;
   url?: string;
-  action?:
-    | 'startPayment'
-    | 'openSupport'
-    | 'registerLiveEvent'
-    | 'trackLinkClick';
+  action?: 'startPayment' | 'openSupport' | 'registerLiveEvent';
   productSlug?: string;
   eventSlug?: string;
-  trackingId?: string;
   visible?: FlowButtonVisibility;
 };
 

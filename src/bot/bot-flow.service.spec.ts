@@ -41,17 +41,10 @@ describe('BotFlowService', () => {
     ]);
   });
 
-  it('builds a tracked link callback for the personal channel', () => {
+  it('builds a direct link button for the personal channel', () => {
     const keyboard = service.buildScreenInlineKeyboard('personal-channel');
 
     expect(keyboard?.[0]?.[0]).toEqual({
-      text: 'Перейти',
-      callback_data: 'tracked-link:personal-channel',
-    });
-    expect(
-      service.getTrackedLinkFromCallback('tracked-link:personal-channel'),
-    ).toEqual({
-      trackingId: 'personal-channel',
       text: 'Перейти',
       url: 'https://t.me/+aCEPu2L_KVo4MjJi',
     });
