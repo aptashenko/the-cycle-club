@@ -41,6 +41,22 @@ describe('BotFlowService', () => {
     ]);
   });
 
+  it('builds a tracked link callback for the personal channel', () => {
+    const keyboard = service.buildScreenInlineKeyboard('personal-channel');
+
+    expect(keyboard?.[0]?.[0]).toEqual({
+      text: 'Перейти',
+      callback_data: 'tracked-link:personal-channel',
+    });
+    expect(
+      service.getTrackedLinkFromCallback('tracked-link:personal-channel'),
+    ).toEqual({
+      trackingId: 'personal-channel',
+      text: 'Перейти',
+      url: 'https://t.me/+aCEPu2L_KVo4MjJi',
+    });
+  });
+
   it('uses active subscription button text when provided', () => {
     const keyboard = service.buildScreenInlineKeyboard('the-cycle', {
       hasActiveSubscription: true,
@@ -144,7 +160,7 @@ describe('BotFlowService', () => {
 
   it('loads keyword response message from config', () => {
     expect(service.getKeywordResponseMessage()).toContain(
-      'Текст ответа на ключевое слово.',
+      'Спасибо, что была вместе с нами на эфире.',
     );
     expect(service.getKeywordResponseDocumentFiles()).toEqual([
       'sekrety_biohaking.pdf',

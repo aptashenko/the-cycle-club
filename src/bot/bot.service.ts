@@ -247,6 +247,13 @@ export class BotService {
       return;
     }
 
+    const trackedLink = this.flow.getTrackedLinkFromCallback(data);
+    if (trackedLink) {
+      this.pendingSupportMessages.delete(user.id);
+      await this.openTrackedLink(chatId, user, trackedLink);
+      return;
+    }
+
     if (data.startsWith(MOCK_PAYMENT_PREFIX)) {
       this.pendingSupportMessages.delete(user.id);
       await this.confirmMockPayment(
@@ -547,6 +554,28 @@ export class BotService {
         inline_keyboard: this.flow.buildLiveEventLinkInlineKeyboard(eventSlug),
       },
     );
+  }
+
+  private async openTrackedLink(
+    chatId: string | number,
+    user: User,
+    link: { trackingId: string; text: string; url: string },
+  ) {
+    await this.activity.track(user, 'link', 'personal_channel_link_clicked', {
+      trackingId: link.trackingId,
+      url: link.url,
+    });
+
+    await this.telegram.sendMessage(chatId, 'Ссылка доступна по кнопке ниже.', {
+      inline_keyboard: [
+        [
+          {
+            text: link.text,
+            url: link.url,
+          },
+        ],
+      ],
+    });
   }
 
   private async startProductPayment(

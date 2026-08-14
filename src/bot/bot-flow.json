@@ -30,6 +30,31 @@
             "text": "\uD83D\uDECE\uFE0F Запись на консультацию",
             "target": "consultation"
           }
+        ],
+        [
+          {
+            "text": "Личный канал 💭",
+            "target": "personal-channel"
+          }
+        ]
+      ]
+    },
+    "personal-channel": {
+      "text": [
+        "Здесь я пишу то, чему обычно тесно в Instagram.",
+        "",
+        "Личные мысли, наблюдения, отношения, материнство, работа и всё то, что хочется иногда сказать чуть глубже и не на широкую публику \uD83E\uDEC2",
+        "",
+        "Все тексты здесь без ChatGPT просто мой стиль, мои формулировки и мои мысли \uD83E\uDDDA\uD83C\uDFFB\u200D♀\uFE0F"
+      ],
+      "buttons": [
+        [
+          {
+            "text": "Перейти",
+            "action": "trackLinkClick",
+            "trackingId": "personal-channel",
+            "url": "https://t.me/+aCEPu2L_KVo4MjJi"
+          }
         ]
       ]
     },

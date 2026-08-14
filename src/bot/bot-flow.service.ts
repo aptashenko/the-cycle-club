@@ -15,6 +15,7 @@ export const PAYMENT_CALLBACK_PREFIX = 'payment:start:';
 export const LIVE_EVENT_REGISTER_CALLBACK_PREFIX = 'live-event:register:';
 export const SUPPORT_OPEN_CALLBACK = 'support:open';
 export const SUPPORT_TOPIC_CALLBACK_PREFIX = 'support:topic:';
+export const TRACKED_LINK_CALLBACK_PREFIX = 'tracked-link:';
 
 type InlineKeyboardButton = {
   text: string;
@@ -149,6 +150,36 @@ export class BotFlowService {
     return callbackData.slice(LIVE_EVENT_REGISTER_CALLBACK_PREFIX.length);
   }
 
+  getTrackedLinkFromCallback(
+    callbackData: string,
+  ): { trackingId: string; text: string; url: string } | null {
+    if (!callbackData.startsWith(TRACKED_LINK_CALLBACK_PREFIX)) {
+      return null;
+    }
+
+    const trackingId = callbackData.slice(TRACKED_LINK_CALLBACK_PREFIX.length);
+
+    for (const screen of Object.values(this.config.screens)) {
+      for (const row of screen.buttons ?? []) {
+        for (const button of row) {
+          if (
+            button.action === 'trackLinkClick' &&
+            button.trackingId === trackingId &&
+            button.url
+          ) {
+            return {
+              trackingId,
+              text: button.text,
+              url: button.url,
+            };
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
   getLiveEvent(eventSlug: string): LiveEventConfig {
     const event = this.config.liveEvents[eventSlug];
 
@@ -274,13 +305,6 @@ export class BotFlowService {
       };
     }
 
-    if (button.url) {
-      return {
-        text,
-        url: button.url,
-      };
-    }
-
     if (button.action === 'startPayment' && button.productSlug) {
       return {
         text,
@@ -292,6 +316,20 @@ export class BotFlowService {
       return {
         text,
         callback_data: `${LIVE_EVENT_REGISTER_CALLBACK_PREFIX}${button.eventSlug}`,
+      };
+    }
+
+    if (button.action === 'trackLinkClick' && button.trackingId && button.url) {
+      return {
+        text,
+        callback_data: `${TRACKED_LINK_CALLBACK_PREFIX}${button.trackingId}`,
+      };
+    }
+
+    if (button.url) {
+      return {
+        text,
+        url: button.url,
       };
     }
 
@@ -476,7 +514,8 @@ export class BotFlowService {
       if (
         action !== 'startPayment' &&
         action !== 'openSupport' &&
-        action !== 'registerLiveEvent'
+        action !== 'registerLiveEvent' &&
+        action !== 'trackLinkClick'
       ) {
         throw new Error(`${path}.action has unsupported value: ${action}`);
       }
@@ -497,6 +536,13 @@ export class BotFlowService {
       );
     }
 
+    if (button.trackingId !== undefined) {
+      parsed.trackingId = this.assertString(
+        button.trackingId,
+        `${path}.trackingId`,
+      );
+    }
+
     if (button.visible !== undefined) {
       parsed.visible = this.parseVisibility(button.visible, `${path}.visible`);
     }
@@ -511,6 +557,16 @@ export class BotFlowService {
 
     if (parsed.action === 'registerLiveEvent' && !parsed.eventSlug) {
       throw new Error(`${path}.eventSlug is required for registerLiveEvent`);
+    }
+
+    if (parsed.action === 'trackLinkClick') {
+      if (!parsed.trackingId) {
+        throw new Error(`${path}.trackingId is required for trackLinkClick`);
+      }
+
+      if (!parsed.url) {
+        throw new Error(`${path}.url is required for trackLinkClick`);
+      }
     }
 
     return parsed;
