@@ -435,11 +435,65 @@ describe('AdminBotService', () => {
     jest.spyOn(users, 'createQueryBuilder').mockReturnValue({
       where,
     } as unknown as ReturnType<Repository<User>['createQueryBuilder']>);
+    users.findOne.mockResolvedValue(user);
 
     await service.handleUpdate(adminMessage('/grant_subscription'));
     await service.handleUpdate(adminMessage('@client_user'));
     await service.handleUpdate(adminMessage('31.12.2026'));
 
+    expect(subscriptions.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-id',
+        productId: 'the-cycle-product-id',
+        status: 'active',
+        expiresAt: expect.any(Date),
+      }),
+    );
+    expect(inviteLinks.createSingleUseInviteLink).toHaveBeenCalledWith({
+      chatId: '-1001234567890',
+      name: expect.stringMatching(/^the-cycle:grant:987654321:\d+$/),
+    });
+    expect(mainTelegram.sendMessage).toHaveBeenCalledWith(
+      '987654321',
+      expect.stringContaining('Доступ к The Cycle открыт'),
+      {
+        inline_keyboard: [
+          [{ text: 'Перейти в клуб ✅', url: 'https://t.me/+singleUse' }],
+        ],
+      },
+    );
+    expect(adminTelegram.sendMessage).toHaveBeenLastCalledWith(
+      123,
+      expect.stringContaining('Invite: sent to user'),
+    );
+  });
+
+  it('finds a user by Telegram ID when granting The Cycle subscription', async () => {
+    const {
+      service,
+      adminTelegram,
+      mainTelegram,
+      inviteLinks,
+      subscriptions,
+      users,
+    } = createService();
+    const user = {
+      id: 'user-id',
+      telegramId: '987654321',
+      username: 'client_user',
+      firstName: 'Client',
+      membershipStatus: 'none',
+    } as User;
+    users.findOne.mockResolvedValue(user);
+
+    await service.handleUpdate(adminMessage('/grant_subscription'));
+    await service.handleUpdate(adminMessage('987654321'));
+    await service.handleUpdate(adminMessage('31.12.2026'));
+
+    expect(users.createQueryBuilder).not.toHaveBeenCalled();
+    expect(users.findOne).toHaveBeenCalledWith({
+      where: { telegramId: '987654321' },
+    });
     expect(subscriptions.save).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: 'user-id',

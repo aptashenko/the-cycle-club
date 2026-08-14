@@ -72,7 +72,8 @@ type GrantSubscriptionSession =
     }
   | {
       step: 'expiresAt';
-      username: string;
+      telegramId: string;
+      userReference: string;
     };
 
 type BroadcastSession =
@@ -1191,7 +1192,7 @@ export class AdminBotService {
       [
         '<b>Grant The Cycle subscription</b>',
         '',
-        'Send user username, for example: <code>@username</code>',
+        'Send user Telegram ID or username, for example: <code>123456789</code> or <code>@username</code>',
         'Use /cancel to cancel.',
       ].join('\n'),
     );
@@ -1203,28 +1204,32 @@ export class AdminBotService {
     session: GrantSubscriptionSession,
   ) {
     if (session.step === 'username') {
+      const telegramId = this.normalizeTelegramId(text);
       const username = this.normalizeUsername(text);
 
-      if (!username) {
+      if (!telegramId && !username) {
         await this.telegram.sendMessage(
           chatId,
-          'Send a valid Telegram username, for example: <code>@username</code>',
+          'Send a valid Telegram ID or username, for example: <code>123456789</code> or <code>@username</code>',
         );
         return;
       }
 
-      const user = await this.findUserByUsername(username);
+      const user = telegramId
+        ? await this.users.findOne({ where: { telegramId } })
+        : await this.findUserByUsername(username as string);
       if (!user) {
         await this.telegram.sendMessage(
           chatId,
-          `User @${this.escape(username)} not found. Send another username or /cancel.`,
+          `User ${this.escape(telegramId ?? `@${username}`)} not found. Send another Telegram ID or username, or /cancel.`,
         );
         return;
       }
 
       this.grantSubscriptionSessions.set(String(chatId), {
         step: 'expiresAt',
-        username,
+        telegramId: user.telegramId,
+        userReference: telegramId ?? `@${username}`,
       });
 
       await this.telegram.sendMessage(
@@ -1259,12 +1264,14 @@ export class AdminBotService {
       return;
     }
 
-    const user = await this.findUserByUsername(session.username);
+    const user = await this.users.findOne({
+      where: { telegramId: session.telegramId },
+    });
     if (!user) {
       this.grantSubscriptionSessions.delete(String(chatId));
       await this.telegram.sendMessage(
         chatId,
-        `User @${this.escape(session.username)} no longer exists. Start again with /grant_subscription.`,
+        `User ${this.escape(session.userReference)} no longer exists. Start again with /grant_subscription.`,
       );
       return;
     }
