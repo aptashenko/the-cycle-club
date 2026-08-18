@@ -29,11 +29,20 @@ export type TelegramPhotoSize = {
   file_size?: number;
 };
 
+export type TelegramContact = {
+  phone_number: string;
+  first_name: string;
+  last_name?: string;
+  user_id?: number;
+  vcard?: string;
+};
+
 export type TelegramMessage = {
   message_id: number;
   from?: TelegramUser;
   chat: TelegramChat;
   text?: string;
+  contact?: TelegramContact;
   video_note?: TelegramVideoNote;
   photo?: TelegramPhotoSize[];
 };

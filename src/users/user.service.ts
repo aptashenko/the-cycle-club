@@ -133,6 +133,18 @@ export class UserService {
     );
   }
 
+  async updatePhoneNumber(userId: string, phoneNumber: string): Promise<User> {
+    await this.userRepository.update({ id: userId }, { phoneNumber });
+
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+
+    if (!user) {
+      throw new Error(`User not found after phone update: ${userId}`);
+    }
+
+    return user;
+  }
+
   findByTelegramId(telegramId: string | number): Promise<User | null> {
     return this.userRepository.findOne({
       where: { telegramId: String(telegramId) },

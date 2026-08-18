@@ -74,10 +74,42 @@ describe('BotFlowService', () => {
     });
   });
 
-  it('builds consultation button as manager Telegram link', () => {
+  it('builds consultation format buttons and payment button', () => {
     const keyboard = service.buildScreenInlineKeyboard('consultation');
 
-    expect(keyboard?.[0]?.[0]).toEqual({
+    expect(keyboard).toHaveLength(5);
+    expect(keyboard?.map((row) => row[0])).toEqual([
+      {
+        text: '⚡️ EXPRESS | 100 €',
+        callback_data: 'flow:consultation-format-1',
+      },
+      {
+        text: '🔬 Первичная | 225 €',
+        callback_data: 'flow:consultation-format-2',
+      },
+      {
+        text: '🐣 Фертильность | 300 €',
+        callback_data: 'flow:consultation-format-3',
+      },
+      {
+        text: '💎 VIP | 420 €',
+        callback_data: 'flow:consultation-format-4',
+      },
+      {
+        text: '👩🏻‍💻 Помочь выбрать',
+        callback_data: 'flow:consultation-assistant',
+      },
+    ]);
+
+    expect(
+      service.buildScreenInlineKeyboard('consultation-format-1')?.[0]?.[0],
+    ).toEqual({
+      text: 'Заказать',
+      callback_data: 'payment:start:consultation-format-1',
+    });
+    expect(
+      service.buildScreenInlineKeyboard('consultation-assistant')?.[0]?.[0],
+    ).toEqual({
       text: 'Связаться с ассистентом',
       url: 'https://telegram.me/assistant_nicolaeva',
     });

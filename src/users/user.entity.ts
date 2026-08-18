@@ -32,6 +32,9 @@ export class User {
   @Column({ nullable: true })
   languageCode?: string;
 
+  @Column({ name: 'phone_number', type: 'varchar', nullable: true })
+  phoneNumber?: string | null;
+
   @Column({ default: 'none' })
   membershipStatus: 'none' | 'active';
 

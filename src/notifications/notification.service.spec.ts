@@ -267,6 +267,139 @@ describe('NotificationService', () => {
     );
   });
 
+  it('sends consultation success message with assistant link', async () => {
+    const config = {
+      get: jest.fn((key: string, defaultValue?: string) =>
+        key === 'ADMIN_TELEGRAM_ID' ? 'admin-chat-id' : defaultValue,
+      ),
+    } as unknown as ConfigService;
+    const telegram = {
+      sendMessage: jest.fn().mockResolvedValue(undefined),
+      isBotBlockedByUser: jest.fn(() => false),
+    } as unknown as jest.Mocked<TelegramApiService>;
+    const adminTelegram = {
+      sendMessage: jest.fn().mockResolvedValue(undefined),
+    } as unknown as AdminTelegramApiService;
+    const flow = {
+      getPaymentSuccessMessage: jest.fn(() => 'payment success'),
+    } as unknown as jest.Mocked<BotFlowService>;
+    const inviteLinks = {
+      createSingleUseInviteLink: jest.fn(),
+    } as unknown as jest.Mocked<InviteLinksService>;
+    const users = {
+      markBotBlocked: jest.fn(),
+    } as unknown as jest.Mocked<UserService>;
+    const service = new NotificationService(
+      config,
+      telegram,
+      adminTelegram,
+      flow,
+      inviteLinks,
+      users,
+    );
+
+    await service.notifyPaymentSuccess({
+      id: 'payment-attempt-id',
+      amount: '1000.00',
+      currency: 'UAH',
+      paidAt: new Date('2026-07-01T12:00:00.000Z'),
+      provider: PaymentProvider.WayForPay,
+      providerOrderId: 'order-1',
+      providerTransactionId: 'tx-1',
+      product: {
+        slug: 'consultation-format-1',
+        title: 'EXPRESS | 100 €',
+        type: ProductType.OneTime,
+        downloadFiles: [],
+      } as unknown as Product,
+      user: {
+        firstName: 'Jane',
+        lastName: 'Doe',
+        telegramId: 'user-chat-id',
+        username: 'jane',
+      } as User,
+    } as PaymentAttempt);
+
+    expect(flow.getPaymentSuccessMessage).not.toHaveBeenCalled();
+    expect(telegram.sendMessage).toHaveBeenCalledWith(
+      'user-chat-id',
+      expect.stringContaining('с вами свяжется ассистент'),
+      {
+        inline_keyboard: [
+          [
+            {
+              text: 'Связаться с ассистентом',
+              url: 'https://telegram.me/assistant_nicolaeva',
+            },
+          ],
+        ],
+      },
+    );
+    expect(telegram.sendMessage).toHaveBeenCalledWith(
+      '7522999600',
+      expect.stringContaining('Jane Doe @jane'),
+    );
+    expect(adminTelegram.sendMessage).toHaveBeenCalledWith(
+      'admin-chat-id',
+      expect.stringContaining('Новая оплата'),
+      undefined,
+    );
+  });
+
+  it('uses phone number in assistant notification when consultation buyer is hidden', async () => {
+    const config = {
+      get: jest.fn((key: string, defaultValue?: string) =>
+        key === 'ADMIN_TELEGRAM_ID' ? 'admin-chat-id' : defaultValue,
+      ),
+    } as unknown as ConfigService;
+    const telegram = {
+      sendMessage: jest.fn().mockResolvedValue(undefined),
+      isBotBlockedByUser: jest.fn(() => false),
+    } as unknown as jest.Mocked<TelegramApiService>;
+    const adminTelegram = {
+      sendMessage: jest.fn().mockResolvedValue(undefined),
+    } as unknown as AdminTelegramApiService;
+    const service = new NotificationService(
+      config,
+      telegram,
+      adminTelegram,
+      {
+        getPaymentSuccessMessage: jest.fn(() => 'payment success'),
+      } as unknown as BotFlowService,
+      {
+        createSingleUseInviteLink: jest.fn(),
+      } as unknown as jest.Mocked<InviteLinksService>,
+      {
+        markBotBlocked: jest.fn(),
+      } as unknown as jest.Mocked<UserService>,
+    );
+
+    await service.notifyPaymentSuccess({
+      id: 'payment-attempt-id',
+      amount: '2250.00',
+      currency: 'UAH',
+      paidAt: new Date('2026-07-01T12:00:00.000Z'),
+      provider: PaymentProvider.WayForPay,
+      providerOrderId: 'order-1',
+      providerTransactionId: 'tx-1',
+      product: {
+        slug: 'consultation-format-2',
+        title: 'Первичная | 225 €',
+        type: ProductType.OneTime,
+        downloadFiles: [],
+      } as unknown as Product,
+      user: {
+        telegramId: 'hidden-user-chat-id',
+        phoneNumber: '+380991112233',
+      } as User,
+    } as PaymentAttempt);
+
+    expect(telegram.sendMessage).toHaveBeenCalledWith(
+      '7522999600',
+      expect.stringContaining('+380991112233'),
+    );
+  });
+
   it('marks user as bot-blocked when Telegram returns blocked error', async () => {
     const config = {
       get: jest.fn((key: string, defaultValue?: string) =>

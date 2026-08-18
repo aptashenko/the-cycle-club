@@ -37,6 +37,7 @@ const LEGACY_CALLBACKS = {
 export class BotService {
   private readonly logger = new Logger(BotService.name);
   private readonly pendingSupportMessages = new Map<string, string>();
+  private readonly pendingConsultationPayments = new Map<string, string>();
 
   constructor(
     private readonly telegram: TelegramApiService,
@@ -69,7 +70,7 @@ export class BotService {
       `Telegram message chat id=${message.chat.id}, type=${message.chat.type}, title=${message.chat.title ?? ''}`,
     );
 
-    if (!message.from || !message.text) {
+    if (!message.from) {
       return;
     }
 
@@ -78,6 +79,16 @@ export class BotService {
     }
 
     const user = await this.users.upsertTelegramUser(message.from);
+
+    if (message.contact) {
+      await this.handleContactMessage(message, user);
+      return;
+    }
+
+    if (!message.text) {
+      return;
+    }
+
     const text = message.text.trim();
     const isStartCommand = this.isStartCommand(text);
     const startPayload = this.extractStartPayload(text);
@@ -93,24 +104,28 @@ export class BotService {
       }
 
       this.pendingSupportMessages.delete(user.id);
+      this.pendingConsultationPayments.delete(user.id);
       await this.sendStartScreen(message.chat.id, user.id);
       return;
     }
 
     if (text === '\uD83D\uDC8C Мои подписки') {
       this.pendingSupportMessages.delete(user.id);
+      this.pendingConsultationPayments.delete(user.id);
       await this.sendSubscriptions(message.chat.id, user.id);
       return;
     }
 
     if (text === '🫂 Поддержка') {
       this.pendingSupportMessages.delete(user.id);
+      this.pendingConsultationPayments.delete(user.id);
       await this.sendSupportTopics(message.chat.id);
       return;
     }
 
     if (this.isKeywordResponseMessage(text)) {
       this.pendingSupportMessages.delete(user.id);
+      this.pendingConsultationPayments.delete(user.id);
       await this.sendKeywordResponse(message.chat.id);
       return;
     }
@@ -134,11 +149,54 @@ export class BotService {
       return;
     }
 
+    const pendingConsultationProductSlug =
+      this.pendingConsultationPayments.get(user.id);
+    if (pendingConsultationProductSlug) {
+      await this.sendPhoneNumberRequest(message.chat.id);
+      return;
+    }
+
     await this.sendStartScreen(message.chat.id, user.id);
   }
 
   private isStartCommand(text: string): boolean {
     return /^\/start(?:@\w+)?(?:\s|$)/.test(text);
+  }
+
+  private async handleContactMessage(message: TelegramMessage, user: User) {
+    if (!message.contact) {
+      return;
+    }
+
+    const updatedUser = await this.users.updatePhoneNumber(
+      user.id,
+      message.contact.phone_number,
+    );
+    const pendingProductSlug = this.pendingConsultationPayments.get(user.id);
+    this.pendingConsultationPayments.delete(user.id);
+
+    await this.activity.track(updatedUser, 'message', 'contact_received', {
+      chatId: message.chat.id,
+      messageId: message.message_id,
+      phoneUserId: message.contact.user_id,
+    });
+
+    await this.telegram.sendMessage(
+      message.chat.id,
+      'Спасибо, номер телефона сохранён.',
+      this.flow.buildReplyKeyboard(),
+    );
+
+    if (pendingProductSlug) {
+      await this.startProductPayment(
+        message.chat.id,
+        updatedUser,
+        pendingProductSlug,
+      );
+      return;
+    }
+
+    await this.sendReplyKeyboard(message.chat.id);
   }
 
   private extractStartPayload(text: string): string | undefined {
@@ -197,30 +255,35 @@ export class BotService {
 
     if (data === LEGACY_CALLBACKS.theCycle) {
       this.pendingSupportMessages.delete(user.id);
+      this.pendingConsultationPayments.delete(user.id);
       await this.sendFlowScreen(chatId, user.id, 'the-cycle');
       return;
     }
 
     if (data === LEGACY_CALLBACKS.marathon) {
       this.pendingSupportMessages.delete(user.id);
+      this.pendingConsultationPayments.delete(user.id);
       await this.sendFlowScreen(chatId, user.id, 'marathon');
       return;
     }
 
     if (data === LEGACY_CALLBACKS.materials) {
       this.pendingSupportMessages.delete(user.id);
+      this.pendingConsultationPayments.delete(user.id);
       await this.sendFlowScreen(chatId, user.id, 'materials');
       return;
     }
 
     if (data === LEGACY_CALLBACKS.insideTheCycle) {
       this.pendingSupportMessages.delete(user.id);
+      this.pendingConsultationPayments.delete(user.id);
       await this.sendFlowScreen(chatId, user.id, 'the-cycle-inside');
       return;
     }
 
     if (data === LEGACY_CALLBACKS.joinTheCycle) {
       this.pendingSupportMessages.delete(user.id);
+      this.pendingConsultationPayments.delete(user.id);
       await this.startProductPayment(chatId, user, 'the-cycle');
       return;
     }
@@ -228,6 +291,7 @@ export class BotService {
     const flowScreenId = this.flow.getFlowScreenIdFromCallback(data);
     if (flowScreenId) {
       this.pendingSupportMessages.delete(user.id);
+      this.pendingConsultationPayments.delete(user.id);
       await this.sendFlowScreen(chatId, user.id, flowScreenId);
       return;
     }
@@ -243,12 +307,14 @@ export class BotService {
     const liveEventSlug = this.flow.getLiveEventSlugFromCallback(data);
     if (liveEventSlug) {
       this.pendingSupportMessages.delete(user.id);
+      this.pendingConsultationPayments.delete(user.id);
       await this.registerLiveEvent(chatId, user, liveEventSlug);
       return;
     }
 
     if (data.startsWith(MOCK_PAYMENT_PREFIX)) {
       this.pendingSupportMessages.delete(user.id);
+      this.pendingConsultationPayments.delete(user.id);
       await this.confirmMockPayment(
         chatId,
         data.slice(MOCK_PAYMENT_PREFIX.length),
@@ -258,6 +324,7 @@ export class BotService {
 
     if (data === SUPPORT_OPEN_CALLBACK) {
       this.pendingSupportMessages.delete(user.id);
+      this.pendingConsultationPayments.delete(user.id);
       await this.sendSupportTopics(chatId);
       return;
     }
@@ -274,6 +341,7 @@ export class BotService {
       }
 
       this.pendingSupportMessages.delete(user.id);
+      this.pendingConsultationPayments.delete(user.id);
       await this.support.create(user, supportTopic.requestTopic);
       await this.telegram.sendMessage(
         chatId,
@@ -556,6 +624,12 @@ export class BotService {
   ) {
     const product = await this.products.getActiveProductBySlug(productSlug);
 
+    if (this.requiresPhoneNumberBeforePayment(product) && !user.phoneNumber) {
+      this.pendingConsultationPayments.set(user.id, product.slug);
+      await this.sendPhoneNumberRequest(chatId);
+      return;
+    }
+
     const hasActiveSubscription = await this.hasActiveSubscriptionForProduct(
       user.id,
       product,
@@ -620,6 +694,29 @@ export class BotService {
             },
           ],
         ],
+      },
+    );
+  }
+
+  private requiresPhoneNumberBeforePayment(product: Product): boolean {
+    return product.slug.startsWith('consultation-format-');
+  }
+
+  private async sendPhoneNumberRequest(chatId: string | number) {
+    await this.telegram.sendMessage(
+      chatId,
+      'Чтобы оформить консультацию, поделитесь, пожалуйста, номером телефона.',
+      {
+        keyboard: [
+          [
+            {
+              text: 'Поделиться номером телефона',
+              request_contact: true,
+            },
+          ],
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true,
       },
     );
   }

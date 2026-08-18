@@ -64,5 +64,45 @@
     ],
     "includedInSubscription": true,
     "isActive": true
+  },
+  {
+    "slug": "consultation-format-1",
+    "title": "⚡\uFE0F EXPRESS | 100 €",
+    "description": "Моковый формат консультации 1.",
+    "price": "100.00",
+    "currency": "EUR",
+    "type": "one_time",
+    "downloadFiles": [],
+    "isActive": true
+  },
+  {
+    "slug": "consultation-format-2",
+    "title": "\uD83D\uDD2C Первичная | 225 €",
+    "description": "Моковый формат консультации 2.",
+    "price": "225.00",
+    "currency": "EUR",
+    "type": "one_time",
+    "downloadFiles": [],
+    "isActive": true
+  },
+  {
+    "slug": "consultation-format-3",
+    "title": "\uD83D\uDC23 Фертильность | 300 €",
+    "description": "Моковый формат консультации 3.",
+    "price": "300.00",
+    "currency": "EUR",
+    "type": "one_time",
+    "downloadFiles": [],
+    "isActive": true
+  },
+  {
+    "slug": "consultation-format-4",
+    "title": "\uD83D\uDC8E VIP | 420 €",
+    "description": "Моковый формат консультации 4.",
+    "price": "420.00",
+    "currency": "EUR",
+    "type": "one_time",
+    "downloadFiles": [],
+    "isActive": true
   }
 ]

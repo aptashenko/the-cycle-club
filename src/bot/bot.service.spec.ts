@@ -1,9 +1,10 @@
 import { ConfigService } from '@nestjs/config';
-import { ProductType } from '../common/enums';
+import { PaymentProvider, ProductType } from '../common/enums';
 import { AttributionService } from '../attribution/attribution.service';
 import { LiveEventsService } from '../live-events/live-events.service';
 import { NotificationService } from '../notifications/notification.service';
 import { PaymentService } from '../payments/payment.service';
+import { Product } from '../products/product.entity';
 import { ProductService } from '../products/product.service';
 import { SubscriptionService } from '../subscriptions/subscription.service';
 import { SupportService } from '../support/support.service';
@@ -270,6 +271,153 @@ describe('BotService support flow', () => {
           ],
         ],
       },
+    );
+  });
+
+  it('requests phone number before consultation payment and continues after contact', async () => {
+    const consultation = {
+      id: 'consultation-format-1-id',
+      slug: 'consultation-format-1',
+      title: 'EXPRESS | 100 €',
+      description: 'Consultation',
+      price: '1000.00',
+      currency: 'UAH',
+      type: ProductType.OneTime,
+      downloadFiles: [],
+      includedInSubscription: false,
+      isActive: true,
+    } as unknown as Product;
+    const userWithoutPhone = { ...user, phoneNumber: null } as User;
+    const userWithPhone = { ...user, phoneNumber: '+380991112233' } as User;
+    const telegram = {
+      answerCallbackQuery: jest.fn().mockResolvedValue(undefined),
+      sendMessage: jest.fn().mockResolvedValue(undefined),
+      sendPhotoFile: jest.fn().mockResolvedValue({ ok: true }),
+      sendPhotoMediaGroup: jest.fn().mockResolvedValue(undefined),
+      sendDocumentFile: jest.fn().mockResolvedValue({ ok: true }),
+    } as unknown as jest.Mocked<TelegramApiService>;
+    const users = {
+      upsertTelegramUser: jest.fn().mockResolvedValue(userWithoutPhone),
+      updatePhoneNumber: jest.fn().mockResolvedValue(userWithPhone),
+    } as unknown as jest.Mocked<UserService>;
+    const products = {
+      getActiveProductBySlug: jest.fn().mockResolvedValue(consultation),
+    } as unknown as jest.Mocked<ProductService>;
+    const subscriptions = {
+      hasActiveSubscription: jest.fn().mockResolvedValue(false),
+    } as unknown as jest.Mocked<SubscriptionService>;
+    const payments = {
+      createWayForPayAttempt: jest.fn().mockResolvedValue({
+        id: 'payment-attempt-id',
+        provider: PaymentProvider.WayForPay,
+        amount: '1000.00',
+        currency: 'UAH',
+        paymentUrl: 'https://example.test/checkout',
+      }),
+    } as unknown as jest.Mocked<PaymentService>;
+    const notifications = {
+      notifyProductAccessBySubscription: jest.fn().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<NotificationService>;
+    const support = {
+      create: jest.fn().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<SupportService>;
+    const liveEvents = {
+      register: jest.fn(),
+    } as unknown as jest.Mocked<LiveEventsService>;
+    const activity = {
+      track: jest.fn().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<UserActivityService>;
+    const attribution = {
+      attachTelegramUser: jest.fn().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<AttributionService>;
+    const service = new BotService(
+      telegram,
+      users,
+      products,
+      subscriptions,
+      payments,
+      notifications,
+      support,
+      liveEvents,
+      activity,
+      attribution,
+      new BotFlowService(),
+      {
+        get: jest.fn((_key: string, defaultValue?: string) => defaultValue),
+      } as unknown as ConfigService,
+    );
+
+    await service.handleUpdate({
+      update_id: 1,
+      callback_query: {
+        id: 'callback-id',
+        from: { id: 123456, first_name: 'Jane' },
+        message: {
+          message_id: 10,
+          chat: { id: 123456, type: 'private' },
+        },
+        data: 'payment:start:consultation-format-1',
+      },
+    });
+
+    expect(payments.createWayForPayAttempt).not.toHaveBeenCalled();
+    expect(telegram.sendMessage).toHaveBeenLastCalledWith(
+      123456,
+      'Чтобы оформить консультацию, поделитесь, пожалуйста, номером телефона.',
+      {
+        keyboard: [
+          [
+            {
+              text: 'Поделиться номером телефона',
+              request_contact: true,
+            },
+          ],
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true,
+      },
+    );
+
+    await service.handleUpdate({
+      update_id: 2,
+      message: {
+        message_id: 11,
+        from: { id: 123456, first_name: 'Jane' },
+        chat: { id: 123456, type: 'private' },
+        contact: {
+          phone_number: '+380991112233',
+          first_name: 'Jane',
+          user_id: 123456,
+        },
+      },
+    });
+
+    expect(users.updatePhoneNumber).toHaveBeenCalledWith(
+      user.id,
+      '+380991112233',
+    );
+    expect(payments.createWayForPayAttempt).toHaveBeenCalledWith(
+      userWithPhone,
+      consultation,
+    );
+    expect(telegram.sendMessage).toHaveBeenCalledWith(
+      123456,
+      'Спасибо, номер телефона сохранён.',
+      new BotFlowService().buildReplyKeyboard(),
+    );
+    expect(telegram.sendMessage).toHaveBeenLastCalledWith(
+      123456,
+      expect.stringContaining('Сумма: 1000.00 UAH'),
+      expect.objectContaining({
+        inline_keyboard: expect.arrayContaining([
+          [
+            {
+              text: '💳 Оплатить',
+              url: 'https://example.test/checkout',
+            },
+          ],
+        ]),
+      }),
     );
   });
 

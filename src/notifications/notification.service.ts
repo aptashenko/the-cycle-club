@@ -16,6 +16,8 @@ const RESOLVE_SUPPORT_PREFIX = 'support:resolve:';
 const MARATHON_PRODUCT_SLUG = 'marathon-4';
 const MARATHON_CHANNEL_CHAT_ID = 'MARATHON_CHANNEL_CHAT_ID';
 const MARATHON_INVITE_EXPIRES_IN_SECONDS = 'MARATHON_INVITE_EXPIRES_IN_SECONDS';
+const ASSISTANT_TELEGRAM_ID = '7522999600';
+const ASSISTANT_TELEGRAM_URL = 'https://telegram.me/assistant_nicolaeva';
 
 @Injectable()
 export class NotificationService {
@@ -37,16 +39,21 @@ export class NotificationService {
     const isSubscriptionProduct =
       paymentAttempt.product.type === ProductType.Subscription;
 
-    await this.sendUserMessage(
-      paymentAttempt.user,
-      this.flow.getPaymentSuccessMessage(
-        {
-          productTitle: paymentAttempt.product.title,
-          date: this.formatSubscriptionDate(subscription),
-        },
-        isSubscriptionProduct,
-      ),
-    );
+    if (this.isConsultationProduct(paymentAttempt.product)) {
+      await this.sendConsultationPaymentSuccess(paymentAttempt);
+      await this.sendConsultationPaymentAssistantNotification(paymentAttempt);
+    } else {
+      await this.sendUserMessage(
+        paymentAttempt.user,
+        this.flow.getPaymentSuccessMessage(
+          {
+            productTitle: paymentAttempt.product.title,
+            date: this.formatSubscriptionDate(subscription),
+          },
+          isSubscriptionProduct,
+        ),
+      );
+    }
 
     if (!isSubscriptionProduct) {
       await this.sendGeneratedAccessLinks(paymentAttempt);
@@ -288,6 +295,58 @@ export class NotificationService {
     }
   }
 
+  private isConsultationProduct(product: Product): boolean {
+    return product.slug?.startsWith('consultation-format-') === true;
+  }
+
+  private async sendConsultationPaymentSuccess(paymentAttempt: PaymentAttempt) {
+    await this.sendUserMessage(
+      paymentAttempt.user,
+      [
+        '✅ <b>Ваша оплата прошла успешно.</b>',
+        '',
+        `Формат: ${this.escape(paymentAttempt.product.title)}`,
+        '',
+        'Пожалуйста, ожидайте: с вами свяжется ассистент для уточнения даты консультации.',
+        '',
+        'Если хотите написать самостоятельно, ссылка на ассистента доступна по кнопке ниже.',
+      ].join('\n'),
+      {
+        inline_keyboard: [
+          [
+            {
+              text: 'Связаться с ассистентом',
+              url: ASSISTANT_TELEGRAM_URL,
+            },
+          ],
+        ],
+      },
+    );
+  }
+
+  private async sendConsultationPaymentAssistantNotification(
+    paymentAttempt: PaymentAttempt,
+  ) {
+    await this.telegram.sendMessage(
+      ASSISTANT_TELEGRAM_ID,
+      [
+        '✅ <b>Оплачена консультация</b>',
+        '',
+        `<b>Пользователь:</b> ${this.escape(
+          this.formatConsultationBuyer(paymentAttempt.user),
+        )}`,
+        `<b>Telegram ID:</b> ${this.escape(paymentAttempt.user.telegramId)}`,
+        '',
+        `<b>Формат:</b> ${this.escape(paymentAttempt.product.title)}`,
+        `<b>Сумма:</b> ${this.escape(
+          `${paymentAttempt.amount} ${paymentAttempt.currency}`,
+        )}`,
+        '',
+        'Свяжитесь с пользователем для уточнения даты консультации.',
+      ].join('\n'),
+    );
+  }
+
   private getMarathonInviteExpiresInSeconds(): number | undefined {
     const raw = this.config.get<string>(MARATHON_INVITE_EXPIRES_IN_SECONDS);
     if (!raw) {
@@ -382,6 +441,20 @@ export class NotificationService {
     const username = user.username ? `(@${user.username})` : '';
 
     return [fullName || 'Без имени', username].filter(Boolean).join(' ');
+  }
+
+  private formatConsultationBuyer(user: User) {
+    const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ');
+
+    if (user.username) {
+      return [fullName, `@${user.username}`].filter(Boolean).join(' ');
+    }
+
+    if (fullName) {
+      return fullName;
+    }
+
+    return user.phoneNumber || 'Без имени';
   }
 
   private formatSubscriptionDate(subscription?: Subscription) {
