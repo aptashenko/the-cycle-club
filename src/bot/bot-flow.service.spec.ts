@@ -41,6 +41,15 @@ describe('BotFlowService', () => {
     ]);
   });
 
+  it('builds a direct link button for the personal channel', () => {
+    const keyboard = service.buildScreenInlineKeyboard('personal-channel');
+
+    expect(keyboard?.[0]?.[0]).toEqual({
+      text: 'Перейти',
+      url: 'https://t.me/+aCEPu2L_KVo4MjJi',
+    });
+  });
+
   it('uses active subscription button text when provided', () => {
     const keyboard = service.buildScreenInlineKeyboard('the-cycle', {
       hasActiveSubscription: true,
@@ -140,5 +149,14 @@ describe('BotFlowService', () => {
     expect(
       service.getDownloadMessage({ productTitle: 'Практичная методичка' }),
     ).toContain('«Практичная методичка»');
+  });
+
+  it('loads keyword response message from config', () => {
+    expect(service.getKeywordResponseMessage()).toContain(
+      'Спасибо, что была вместе с нами на эфире.',
+    );
+    expect(service.getKeywordResponseDocumentFiles()).toEqual([
+      'sekrety_biohaking.pdf',
+    ]);
   });
 });

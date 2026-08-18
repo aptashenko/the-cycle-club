@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { existsSync } from 'fs';
 import { basename, join } from 'path';
 import { AttributionService } from '../attribution/attribution.service';
@@ -49,6 +50,7 @@ export class BotService {
     private readonly activity: UserActivityService,
     private readonly attribution: AttributionService,
     private readonly flow: BotFlowService,
+    private readonly config: ConfigService,
   ) {}
 
   async handleUpdate(update: TelegramUpdate) {
@@ -107,6 +109,12 @@ export class BotService {
       return;
     }
 
+    if (this.isKeywordResponseMessage(text)) {
+      this.pendingSupportMessages.delete(user.id);
+      await this.sendKeywordResponse(message.chat.id);
+      return;
+    }
+
     const pendingSupportTopic = this.pendingSupportMessages.get(user.id);
     if (pendingSupportTopic) {
       if (!text) {
@@ -136,6 +144,39 @@ export class BotService {
   private extractStartPayload(text: string): string | undefined {
     const match = text.match(/^\/start(?:@\w+)?\s+([A-Za-z0-9_-]{1,64})$/);
     return match?.[1];
+  }
+
+  private isKeywordResponseMessage(text: string): boolean {
+    const keyword = this.config.get<string>('KEYWORD_RESPONSE_WORD', '').trim();
+
+    return (
+      keyword.length > 0 &&
+      text.localeCompare(keyword, undefined, { sensitivity: 'accent' }) === 0
+    );
+  }
+
+  private async sendKeywordResponse(chatId: string | number) {
+    await this.telegram.sendMessage(
+      chatId,
+      this.flow.getKeywordResponseMessage(),
+    );
+
+    for (const documentFile of this.flow.getKeywordResponseDocumentFiles()) {
+      const document = this.resolveFlowDocumentFile(documentFile);
+
+      if (!document) {
+        this.logger.warn(
+          `Keyword response document not found: ${documentFile}`,
+        );
+        continue;
+      }
+
+      await this.telegram.sendDocumentFile(
+        chatId,
+        document.path,
+        document.filename,
+      );
+    }
   }
 
   private async handleCallback(callbackQuery: TelegramCallbackQuery) {
@@ -375,6 +416,22 @@ export class BotService {
     const filename = basename(photoFile);
 
     if (filename !== photoFile) {
+      return null;
+    }
+
+    const path = join(process.cwd(), 'files', filename);
+
+    if (!existsSync(path)) {
+      return null;
+    }
+
+    return { path, filename };
+  }
+
+  private resolveFlowDocumentFile(documentFile: string) {
+    const filename = basename(documentFile);
+
+    if (filename !== documentFile) {
       return null;
     }
 

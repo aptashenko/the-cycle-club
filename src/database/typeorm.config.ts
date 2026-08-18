@@ -1,4 +1,7 @@
 import { DataSourceOptions } from 'typeorm';
+import { BroadcastCampaign } from '../admin-bot/broadcast-campaign.entity';
+import { BroadcastDelivery } from '../admin-bot/broadcast-delivery.entity';
+import { BroadcastMediaAsset } from '../admin-bot/broadcast-media-asset.entity';
 import { TelegramAttribution } from '../attribution/telegram-attribution.entity';
 import { LiveEventRegistration } from '../live-events/live-event-registration.entity';
 import { PaymentAttempt } from '../payments/payment-attempt.entity';
@@ -17,6 +20,9 @@ export const databaseEntities = [
   UserActivityEvent,
   TelegramAttribution,
   LiveEventRegistration,
+  BroadcastMediaAsset,
+  BroadcastCampaign,
+  BroadcastDelivery,
 ];
 
 export function buildDataSourceOptions(

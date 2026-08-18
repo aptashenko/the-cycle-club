@@ -79,6 +79,34 @@ export class TelegramApiService {
     return this.requestForm('sendPhoto', form);
   }
 
+  async sendPhotoBuffer(
+    chatId: string | number,
+    photo: Buffer,
+    filename = 'broadcast-photo.jpg',
+    replyMarkup?: TelegramMarkup,
+    caption?: string,
+  ) {
+    const form = new FormData();
+    const photoBuffer = this.toArrayBuffer(photo);
+    form.set('chat_id', String(chatId));
+    form.set(
+      'photo',
+      new Blob([photoBuffer], { type: this.getPhotoContentType(filename) }),
+      filename,
+    );
+
+    if (caption) {
+      form.set('caption', caption);
+      form.set('parse_mode', 'HTML');
+    }
+
+    if (replyMarkup) {
+      form.set('reply_markup', JSON.stringify(replyMarkup));
+    }
+
+    return this.requestForm('sendPhoto', form);
+  }
+
   async sendPhotoMediaGroup(
     chatId: string | number,
     photos: TelegramPhotoFile[],
@@ -113,6 +141,57 @@ export class TelegramApiService {
     return this.requestForm('sendMediaGroup', form);
   }
 
+  async sendVideoNoteFile(
+    chatId: string | number,
+    videoNote: Buffer,
+    filename = 'video-note.mp4',
+    replyMarkup?: TelegramMarkup,
+  ) {
+    const form = new FormData();
+    const videoNoteBuffer = this.toArrayBuffer(videoNote);
+    form.set('chat_id', String(chatId));
+    form.set(
+      'video_note',
+      new Blob([videoNoteBuffer], { type: 'video/mp4' }),
+      filename,
+    );
+
+    if (replyMarkup) {
+      form.set('reply_markup', JSON.stringify(replyMarkup));
+    }
+
+    return this.requestForm('sendVideoNote', form);
+  }
+
+  async sendDocumentFile(
+    chatId: string | number,
+    documentPath: string,
+    filename: string,
+    replyMarkup?: TelegramMarkup,
+    caption?: string,
+  ) {
+    const form = new FormData();
+    form.set('chat_id', String(chatId));
+    form.set(
+      'document',
+      new Blob([readFileSync(documentPath)], {
+        type: this.getDocumentContentType(filename),
+      }),
+      filename,
+    );
+
+    if (caption) {
+      form.set('caption', caption);
+      form.set('parse_mode', 'HTML');
+    }
+
+    if (replyMarkup) {
+      form.set('reply_markup', JSON.stringify(replyMarkup));
+    }
+
+    return this.requestForm('sendDocument', form);
+  }
+
   async answerCallbackQuery(callbackQueryId: string, text?: string) {
     return this.request('answerCallbackQuery', {
       callback_query_id: callbackQueryId,
@@ -123,6 +202,13 @@ export class TelegramApiService {
   async deleteWebhook(dropPendingUpdates = false) {
     return this.request('deleteWebhook', {
       drop_pending_updates: dropPendingUpdates,
+    });
+  }
+
+  async deleteMessage(chatId: string | number, messageId: number) {
+    return this.request('deleteMessage', {
+      chat_id: chatId,
+      message_id: messageId,
     });
   }
 
@@ -236,6 +322,21 @@ export class TelegramApiService {
     }
 
     return 'application/octet-stream';
+  }
+
+  private getDocumentContentType(filename: string): string {
+    if (extname(filename).toLowerCase() === '.pdf') {
+      return 'application/pdf';
+    }
+
+    return 'application/octet-stream';
+  }
+
+  private toArrayBuffer(buffer: Buffer) {
+    return buffer.buffer.slice(
+      buffer.byteOffset,
+      buffer.byteOffset + buffer.byteLength,
+    ) as ArrayBuffer;
   }
 
   private formatError(

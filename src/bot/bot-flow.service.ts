@@ -249,6 +249,14 @@ export class BotFlowService {
     return this.config.subscriptions.noExpirationMessage;
   }
 
+  getKeywordResponseMessage(): string {
+    return this.config.keywordResponse.message.join('\n');
+  }
+
+  getKeywordResponseDocumentFiles(): string[] {
+    return this.config.keywordResponse.documentFiles ?? [];
+  }
+
   private buildInlineButton(
     button: FlowButton,
     context: FlowButtonContext,
@@ -266,13 +274,6 @@ export class BotFlowService {
       };
     }
 
-    if (button.url) {
-      return {
-        text,
-        url: button.url,
-      };
-    }
-
     if (button.action === 'startPayment' && button.productSlug) {
       return {
         text,
@@ -284,6 +285,13 @@ export class BotFlowService {
       return {
         text,
         callback_data: `${LIVE_EVENT_REGISTER_CALLBACK_PREFIX}${button.eventSlug}`,
+      };
+    }
+
+    if (button.url) {
+      return {
+        text,
+        url: button.url,
       };
     }
 
@@ -366,6 +374,7 @@ export class BotFlowService {
       liveEvents: this.parseLiveEvents(config.liveEvents),
       payment: this.parsePayment(config.payment),
       subscriptions: this.parseSubscriptions(config.subscriptions),
+      keywordResponse: this.parseKeywordResponse(config.keywordResponse),
     };
 
     if (!flowConfig.screens[flowConfig.startScreen]) {
@@ -666,6 +675,26 @@ export class BotFlowService {
         subscriptions.noExpirationMessage,
         'subscriptions.noExpirationMessage',
       ),
+    };
+  }
+
+  private parseKeywordResponse(
+    value: unknown,
+  ): BotFlowConfig['keywordResponse'] {
+    const keywordResponse = this.assertObject(value, 'keywordResponse');
+
+    return {
+      message: this.parseTextLines(
+        keywordResponse.message,
+        'keywordResponse.message',
+      ),
+      documentFiles:
+        keywordResponse.documentFiles === undefined
+          ? undefined
+          : this.parseStringArray(
+              keywordResponse.documentFiles,
+              'keywordResponse.documentFiles',
+            ),
     };
   }
 

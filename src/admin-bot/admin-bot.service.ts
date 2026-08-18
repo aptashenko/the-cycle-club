@@ -21,6 +21,9 @@ import { SupportRequest } from '../support/support-request.entity';
 import { UserActivityEvent } from '../user-activity/user-activity-event.entity';
 import { User } from '../users/user.entity';
 import { AdminTelegramApiService } from './admin-telegram-api.service';
+import { BroadcastCampaign } from './broadcast-campaign.entity';
+import { BroadcastDelivery } from './broadcast-delivery.entity';
+import { BroadcastMediaAsset } from './broadcast-media-asset.entity';
 
 const RESOLVE_SUPPORT_PREFIX = 'support:resolve:';
 const REPLY_SUPPORT_PREFIX = 'support:reply:';
@@ -32,13 +35,18 @@ const MARATHON_PRODUCT_SLUG_PREFIX = 'marathon-';
 const MARATHON_FLOW_ACTION_PREFIX = 'marathon:';
 const MARATHON_CHANNEL_CHAT_ID = 'MARATHON_CHANNEL_CHAT_ID';
 const MARATHON_INVITE_EXPIRES_IN_SECONDS = 'MARATHON_INVITE_EXPIRES_IN_SECONDS';
+const CLOSED_GROUP_CHAT_ID = 'CLOSED_GROUP_CHAT_ID';
 const BROADCAST_BATCH_SIZE = 100;
 const BROADCAST_SEND_DELAY_MS = 50;
 const BROADCAST_CONFIRM_BUTTON = '✅ Подтвердить рассылку';
 const BROADCAST_CANCEL_BUTTON = '❌ Отмена';
 const BROADCAST_SKIP_BUTTON = 'Без кнопки';
+const BROADCAST_SKIP_MEDIA_BUTTON = 'Без медиа';
+const BROADCAST_VIDEO_NOTE_BUTTON = '🎥 Кружочек';
+const BROADCAST_PHOTO_BUTTON = '🖼 Фото';
 const MARATHON_DEFAULT_TEXT_BUTTON = 'Стандартный текст';
 const MARATHON_DEFAULT_BUTTON_TEXT_BUTTON = 'Стандартная кнопка';
+const PAYMENT_BROADCAST_DEFAULT_BUTTON_TEXT_BUTTON = 'Стандартная кнопка оплаты';
 const ADMIN_MENU_BUTTON = '☰ Меню';
 const ADMIN_STATS_BUTTON = '📊 Статистика';
 const ADMIN_MARATHON_MENU_BUTTON = '🏁 Марафон';
@@ -56,6 +64,7 @@ const ADMIN_SUBSCRIPTIONS_BUTTON = '🎟 Подписки';
 const ADMIN_ACTIVITY_BUTTON = '🧭 Активность';
 const ADMIN_SUPPORT_BUTTON = '💬 Поддержка';
 const ADMIN_BROADCAST_BUTTON = '📣 Рассылка';
+const ADMIN_PAYMENT_BROADCAST_BUTTON = '💳 Рассылка с оплатой';
 
 type GrantSubscriptionSession =
   | {
@@ -63,7 +72,8 @@ type GrantSubscriptionSession =
     }
   | {
       step: 'expiresAt';
-      username: string;
+      telegramId: string;
+      userReference: string;
     };
 
 type BroadcastSession =
@@ -78,6 +88,29 @@ type BroadcastSession =
       text: string;
     }
   | {
+      step: 'paymentProductChoice';
+    }
+  | {
+      step: 'paymentMessage';
+      productSlug: string;
+    }
+  | {
+      step: 'paymentMediaChoice';
+      productSlug: string;
+      text: string;
+    }
+  | {
+      step: 'paymentVideoNoteKey' | 'paymentPhotoKey';
+      productSlug: string;
+      text: string;
+    }
+  | {
+      step: 'paymentButtonText';
+      productSlug: string;
+      text: string;
+      media?: BroadcastMedia;
+    }
+  | {
       step: 'buttonText';
       text: string;
     }
@@ -87,10 +120,26 @@ type BroadcastSession =
       buttonText: string;
     }
   | {
+      step: 'mediaChoice';
+      text: string;
+      button?: BroadcastButton;
+    }
+  | {
+      step: 'videoNoteKey';
+      text: string;
+      button?: BroadcastButton;
+    }
+  | {
+      step: 'photoKey';
+      text: string;
+      button?: BroadcastButton;
+    }
+  | {
       step: 'confirm';
       text: string;
       recipientsCount: number;
       button?: BroadcastButton;
+      media?: BroadcastMedia;
     };
 
 type UrlBroadcastButton = {
@@ -107,9 +156,34 @@ type CallbackBroadcastButton = {
 
 type BroadcastButton = UrlBroadcastButton | CallbackBroadcastButton;
 
+type BroadcastMedia = {
+  type: 'video_note' | 'photo';
+  assetId: string;
+  key: string;
+};
+
+type SaveMediaAssetSession = {
+  type: 'video_note' | 'photo';
+  key: string;
+};
+
 type SupportReplySession = {
   requestId: string;
 };
+
+type InviteDeliveryResult =
+  | {
+      status: 'sent';
+      inviteLink: string;
+    }
+  | {
+      status: 'skipped';
+      reason: string;
+    }
+  | {
+      status: 'failed';
+      reason: string;
+    };
 
 type AdminMenuContext =
   | {
@@ -128,6 +202,10 @@ export class AdminBotService {
     GrantSubscriptionSession
   >();
   private readonly broadcastSessions = new Map<string, BroadcastSession>();
+  private readonly saveMediaAssetSessions = new Map<
+    string,
+    SaveMediaAssetSession
+  >();
   private readonly supportReplySessions = new Map<
     string,
     SupportReplySession
@@ -153,6 +231,12 @@ export class AdminBotService {
     private readonly supportRequests: Repository<SupportRequest>,
     @InjectRepository(UserActivityEvent)
     private readonly activity: Repository<UserActivityEvent>,
+    @InjectRepository(BroadcastMediaAsset)
+    private readonly broadcastMediaAssets: Repository<BroadcastMediaAsset>,
+    @InjectRepository(BroadcastCampaign)
+    private readonly broadcastCampaigns: Repository<BroadcastCampaign>,
+    @InjectRepository(BroadcastDelivery)
+    private readonly broadcastDeliveries: Repository<BroadcastDelivery>,
   ) {
     const ids = [
       ...this.config.get<string>('ADMIN_TELEGRAM_IDS', '').split(','),
@@ -170,7 +254,7 @@ export class AdminBotService {
       return;
     }
 
-    if (!update.message?.from || !update.message.text) {
+    if (!update.message?.from) {
       return;
     }
 
@@ -178,6 +262,10 @@ export class AdminBotService {
     const from = message.from;
     if (!from || !this.isAdmin(from.id)) {
       await this.telegram.sendMessage(message.chat.id, 'Access denied.');
+      return;
+    }
+
+    if (!message.text && !message.video_note && !message.photo?.length) {
       return;
     }
 
@@ -240,6 +328,20 @@ export class AdminBotService {
     const [command, ...args] = text.split(/\s+/);
     const chatId = message.chat.id;
 
+    const saveMediaAssetSession = this.saveMediaAssetSessions.get(
+      String(chatId),
+    );
+    if (saveMediaAssetSession) {
+      if (command === '/cancel') {
+        this.saveMediaAssetSessions.delete(String(chatId));
+        await this.telegram.sendMessage(chatId, 'Media save cancelled.');
+        return;
+      }
+
+      await this.handleSaveMediaAssetStep(message, saveMediaAssetSession);
+      return;
+    }
+
     const supportReplySession = this.supportReplySessions.get(String(chatId));
     if (supportReplySession) {
       if (command === '/cancel') {
@@ -279,7 +381,13 @@ export class AdminBotService {
         return;
       }
 
-      await this.handleBroadcastStep(chatId, text, command, broadcastSession);
+      await this.handleBroadcastStep(
+        chatId,
+        text,
+        command,
+        message,
+        broadcastSession,
+      );
       return;
     }
 
@@ -339,6 +447,51 @@ export class AdminBotService {
 
     if (command === '/broadcast') {
       await this.startBroadcast(chatId);
+      return;
+    }
+
+    if (command === '/broadcast_payment') {
+      await this.startPaymentBroadcast(chatId);
+      return;
+    }
+
+    if (command === '/broadcasts') {
+      await this.sendBroadcasts(chatId);
+      return;
+    }
+
+    if (command === '/delete_broadcast') {
+      await this.deleteBroadcast(chatId, args[0]);
+      return;
+    }
+
+    if (command === '/save_video_note') {
+      await this.startSaveMediaAsset(chatId, 'video_note', args[0]);
+      return;
+    }
+
+    if (command === '/save_photo') {
+      await this.startSaveMediaAsset(chatId, 'photo', args[0]);
+      return;
+    }
+
+    if (command === '/video_notes') {
+      await this.sendMediaAssets(chatId, 'video_note');
+      return;
+    }
+
+    if (command === '/photos') {
+      await this.sendMediaAssets(chatId, 'photo');
+      return;
+    }
+
+    if (command === '/delete_video_note') {
+      await this.deleteMediaAsset(chatId, 'video_note', args[0]);
+      return;
+    }
+
+    if (command === '/delete_photo') {
+      await this.deleteMediaAsset(chatId, 'photo', args[0]);
       return;
     }
 
@@ -495,6 +648,11 @@ export class AdminBotService {
       return true;
     }
 
+    if (text === ADMIN_PAYMENT_BROADCAST_BUTTON) {
+      await this.startPaymentBroadcast(chatId);
+      return true;
+    }
+
     if (text === ADMIN_SINGLE_USE_INVITE_BUTTON) {
       if (context?.section === 'marathonFlow') {
         await this.sendSingleUseInviteLink(chatId, context.productSlug);
@@ -538,7 +696,16 @@ export class AdminBotService {
         '/subscriptions &lt;telegram_id_or_username&gt; - user subscriptions',
         '/grant_subscription - grant The Cycle subscription by username',
         '/broadcast - send a text broadcast from the main bot',
+        '/broadcast_payment - send a broadcast with a product payment button',
         '/broadcast_marathon - send marathon-4 payment broadcast',
+        '/broadcasts - list recent broadcasts',
+        '/delete_broadcast &lt;id&gt; - delete a broadcast from users',
+        '/save_video_note &lt;key&gt; - save a broadcast video note',
+        '/video_notes - list saved video notes',
+        '/delete_video_note &lt;key&gt; - delete a saved video note',
+        '/save_photo &lt;key&gt; - save a broadcast photo',
+        '/photos - list saved photos',
+        '/delete_photo &lt;key&gt; - delete a saved photo',
         '/activity &lt;telegram_id_or_username&gt; - user path',
         '/cancel - cancel current dialog',
       ].join('\n'),
@@ -607,6 +774,11 @@ export class AdminBotService {
 
     if (action === 'broadcast') {
       await this.startBroadcast(chatId);
+      return;
+    }
+
+    if (action === 'broadcast_payment') {
+      await this.startPaymentBroadcast(chatId);
       return;
     }
 
@@ -1020,7 +1192,7 @@ export class AdminBotService {
       [
         '<b>Grant The Cycle subscription</b>',
         '',
-        'Send user username, for example: <code>@username</code>',
+        'Send user Telegram ID or username, for example: <code>123456789</code> or <code>@username</code>',
         'Use /cancel to cancel.',
       ].join('\n'),
     );
@@ -1032,28 +1204,32 @@ export class AdminBotService {
     session: GrantSubscriptionSession,
   ) {
     if (session.step === 'username') {
+      const telegramId = this.normalizeTelegramId(text);
       const username = this.normalizeUsername(text);
 
-      if (!username) {
+      if (!telegramId && !username) {
         await this.telegram.sendMessage(
           chatId,
-          'Send a valid Telegram username, for example: <code>@username</code>',
+          'Send a valid Telegram ID or username, for example: <code>123456789</code> or <code>@username</code>',
         );
         return;
       }
 
-      const user = await this.findUserByUsername(username);
+      const user = telegramId
+        ? await this.users.findOne({ where: { telegramId } })
+        : await this.findUserByUsername(username as string);
       if (!user) {
         await this.telegram.sendMessage(
           chatId,
-          `User @${this.escape(username)} not found. Send another username or /cancel.`,
+          `User ${this.escape(telegramId ?? `@${username}`)} not found. Send another Telegram ID or username, or /cancel.`,
         );
         return;
       }
 
       this.grantSubscriptionSessions.set(String(chatId), {
         step: 'expiresAt',
-        username,
+        telegramId: user.telegramId,
+        userReference: telegramId ?? `@${username}`,
       });
 
       await this.telegram.sendMessage(
@@ -1088,12 +1264,14 @@ export class AdminBotService {
       return;
     }
 
-    const user = await this.findUserByUsername(session.username);
+    const user = await this.users.findOne({
+      where: { telegramId: session.telegramId },
+    });
     if (!user) {
       this.grantSubscriptionSessions.delete(String(chatId));
       await this.telegram.sendMessage(
         chatId,
-        `User @${this.escape(session.username)} no longer exists. Start again with /grant_subscription.`,
+        `User ${this.escape(session.userReference)} no longer exists. Start again with /grant_subscription.`,
       );
       return;
     }
@@ -1111,6 +1289,11 @@ export class AdminBotService {
     }
 
     const subscription = await this.grantSubscription(user, product, expiresAt);
+    const inviteDelivery = await this.sendGrantedSubscriptionInvite(
+      user,
+      product,
+      subscription,
+    );
     this.grantSubscriptionSessions.delete(String(chatId));
 
     await this.telegram.sendMessage(
@@ -1123,8 +1306,75 @@ export class AdminBotService {
         `Product: ${this.escape(product.title)}`,
         `Status: ${this.escape(subscription.status)}`,
         `Expires: ${this.formatDate(subscription.expiresAt)}`,
+        '',
+        this.formatInviteDeliveryResult(inviteDelivery),
       ].join('\n'),
     );
+  }
+
+  private async sendGrantedSubscriptionInvite(
+    user: User,
+    product: Product,
+    subscription: Subscription,
+  ): Promise<InviteDeliveryResult> {
+    const groupChatId = this.config.get<string>(CLOSED_GROUP_CHAT_ID);
+    if (!groupChatId) {
+      return {
+        status: 'skipped',
+        reason: `${CLOSED_GROUP_CHAT_ID} is not configured`,
+      };
+    }
+
+    try {
+      const invite = await this.inviteLinks.createSingleUseInviteLink({
+        chatId: groupChatId,
+        name: this.buildGrantedSubscriptionInviteLinkName(user),
+      });
+
+      const response = (await this.mainTelegram.sendMessage(
+        user.telegramId,
+        [
+          'Доступ к The Cycle открыт ✅',
+          '',
+          `Продукт: ${this.escape(product.title)}`,
+          `Подписка активна до ${this.formatDate(subscription.expiresAt)}`,
+          '',
+          'Ссылка индивидуальная и рассчитана на одно вступление.',
+        ].join('\n'),
+        {
+          inline_keyboard: [
+            [
+              {
+                text: 'Перейти в клуб ✅',
+                url: invite.inviteLink,
+              },
+            ],
+          ],
+        },
+      )) as { ok: boolean; description?: string };
+
+      if (!response.ok) {
+        return {
+          status: 'failed',
+          reason: response.description ?? 'Telegram sendMessage failed',
+        };
+      }
+
+      return { status: 'sent', inviteLink: invite.inviteLink };
+    } catch (error) {
+      return {
+        status: 'failed',
+        reason: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  private formatInviteDeliveryResult(result: InviteDeliveryResult) {
+    if (result.status === 'sent') {
+      return 'Invite: sent to user';
+    }
+
+    return `Invite: ${result.status} - ${this.escape(result.reason)}`;
   }
 
   private async grantSubscription(
@@ -1169,6 +1419,7 @@ export class AdminBotService {
         [{ text: ADMIN_MARATHON_MENU_BUTTON }],
         [{ text: ADMIN_USERS_MENU_BUTTON }],
         [{ text: ADMIN_COMMUNICATION_MENU_BUTTON }],
+        [{ text: ADMIN_PAYMENT_BROADCAST_BUTTON }],
         [{ text: ADMIN_GRANT_SUBSCRIPTION_BUTTON }],
         [{ text: ADMIN_MENU_BUTTON }],
       ],
@@ -1227,6 +1478,7 @@ export class AdminBotService {
       keyboard: [
         [{ text: ADMIN_SUPPORT_BUTTON }],
         [{ text: ADMIN_BROADCAST_BUTTON }],
+        [{ text: ADMIN_PAYMENT_BROADCAST_BUTTON }],
         [{ text: ADMIN_BACK_BUTTON }],
       ],
       resize_keyboard: true,
@@ -1269,6 +1521,20 @@ export class AdminBotService {
     };
   }
 
+  private getBroadcastMediaKeyboardMarkup() {
+    return {
+      keyboard: [
+        [{ text: BROADCAST_PHOTO_BUTTON }],
+        [{ text: BROADCAST_VIDEO_NOTE_BUTTON }],
+        [{ text: BROADCAST_SKIP_MEDIA_BUTTON }],
+        [{ text: BROADCAST_CANCEL_BUTTON }],
+      ],
+      resize_keyboard: true,
+      one_time_keyboard: false,
+      selective: true,
+    };
+  }
+
   private getMarathonBroadcastTextKeyboardMarkup() {
     return {
       keyboard: [
@@ -1285,6 +1551,32 @@ export class AdminBotService {
     return {
       keyboard: [
         [{ text: MARATHON_DEFAULT_BUTTON_TEXT_BUTTON }],
+        [{ text: BROADCAST_CANCEL_BUTTON }],
+      ],
+      resize_keyboard: true,
+      one_time_keyboard: false,
+      selective: true,
+    };
+  }
+
+  private getPaymentBroadcastProductKeyboardMarkup(products: Product[]) {
+    return {
+      keyboard: [
+        ...products.map((product) => [
+          { text: this.formatPaymentBroadcastProductChoice(product) },
+        ]),
+        [{ text: BROADCAST_CANCEL_BUTTON }],
+      ],
+      resize_keyboard: true,
+      one_time_keyboard: false,
+      selective: true,
+    };
+  }
+
+  private getPaymentBroadcastButtonTextKeyboardMarkup() {
+    return {
+      keyboard: [
+        [{ text: PAYMENT_BROADCAST_DEFAULT_BUTTON_TEXT_BUTTON }],
         [{ text: BROADCAST_CANCEL_BUTTON }],
       ],
       resize_keyboard: true,
@@ -1316,6 +1608,246 @@ export class AdminBotService {
       remove_keyboard: true,
       selective: true,
     };
+  }
+
+  private async startSaveMediaAsset(
+    chatId: string | number,
+    type: BroadcastMediaAsset['type'],
+    rawKey?: string,
+  ) {
+    const key = rawKey ? this.normalizeMediaAssetKey(rawKey) : null;
+    const command = type === 'photo' ? '/save_photo' : '/save_video_note';
+    const exampleKey = type === 'photo' ? 'launch_photo' : 'morning_offer';
+    const label = this.getMediaTypeLabel(type);
+    if (!key) {
+      await this.telegram.sendMessage(
+        chatId,
+        [
+          `Usage: <code>${command} &lt;key&gt;</code>`,
+          'Key can contain latin letters, numbers, underscore, and dash.',
+          `Example: <code>${command} ${exampleKey}</code>`,
+        ].join('\n'),
+      );
+      return;
+    }
+
+    this.saveMediaAssetSessions.set(String(chatId), { type, key });
+
+    await this.telegram.sendMessage(
+      chatId,
+      [
+        `<b>Save ${label}: ${this.escape(key)}</b>`,
+        '',
+        `Send a Telegram ${label} now.`,
+        'Use /cancel to cancel.',
+      ].join('\n'),
+    );
+  }
+
+  private async handleSaveMediaAssetStep(
+    message: TelegramMessage,
+    session: SaveMediaAssetSession,
+  ) {
+    const chatId = message.chat.id;
+    const label = this.getMediaTypeLabel(session.type);
+    const result = await this.saveBroadcastMediaAssetFromMessage(
+      message,
+      session.type,
+      session.key,
+    );
+    if (!result.ok) {
+      await this.telegram.sendMessage(chatId, result.message);
+      return;
+    }
+
+    const { asset } = result;
+    this.saveMediaAssetSessions.delete(String(chatId));
+
+    await this.telegram.sendMessage(
+      chatId,
+      [
+        `✅ <b>${this.capitalize(label)} saved</b>`,
+        '',
+        `Key: <code>${this.escape(asset.key)}</code>`,
+        ...(asset.duration
+          ? [`Duration: ${this.escape(String(asset.duration))} sec`]
+          : []),
+        ...(asset.width && asset.height
+          ? [`Size: ${asset.width}x${asset.height}`]
+          : []),
+        `Size: ${this.formatBytes(asset.fileSize ?? asset.fileData.length)}`,
+      ].join('\n'),
+    );
+  }
+
+  private async saveBroadcastMediaAssetFromMessage(
+    message: TelegramMessage,
+    type: BroadcastMediaAsset['type'],
+    key: string,
+  ): Promise<
+    | {
+        ok: true;
+        asset: BroadcastMediaAsset;
+      }
+    | {
+        ok: false;
+        message: string;
+      }
+  > {
+    const mediaFile = this.getMessageMediaFile(message, type);
+    const label = this.getMediaTypeLabel(type);
+    if (!mediaFile) {
+      return {
+        ok: false,
+        message: `Send a Telegram ${label}, or /cancel.`,
+      };
+    }
+
+    const fileResponse = await this.telegram.getFile(mediaFile.fileId);
+    const filePath = fileResponse.result?.file_path;
+    if (!fileResponse.ok || !filePath) {
+      return {
+        ok: false,
+        message: `Could not read ${label} file: ${this.escape(fileResponse.description ?? 'missing file path')}`,
+      };
+    }
+
+    const fileData = await this.telegram.downloadFile(filePath);
+    if (!fileData) {
+      return {
+        ok: false,
+        message: `Could not download ${label}.`,
+      };
+    }
+
+    let asset = await this.broadcastMediaAssets.findOne({
+      where: { key },
+    });
+
+    if (!asset) {
+      asset = this.broadcastMediaAssets.create({ type, key });
+    }
+
+    asset.type = type;
+    asset.adminFileId = mediaFile.fileId;
+    asset.fileUniqueId = mediaFile.fileUniqueId ?? null;
+    asset.fileData = fileData;
+    asset.fileSize = mediaFile.fileSize ?? fileData.length;
+    asset.duration = mediaFile.duration ?? null;
+    asset.length = mediaFile.length ?? null;
+    asset.width = mediaFile.width ?? null;
+    asset.height = mediaFile.height ?? null;
+    asset.createdByTelegramId = String(message.from?.id ?? '');
+
+    return {
+      ok: true,
+      asset: await this.broadcastMediaAssets.save(asset),
+    };
+  }
+
+  private getMessageMediaFile(
+    message: TelegramMessage,
+    type: BroadcastMediaAsset['type'],
+  ) {
+    if (type === 'video_note') {
+      const videoNote = message.video_note;
+      return videoNote
+        ? {
+            fileId: videoNote.file_id,
+            fileUniqueId: videoNote.file_unique_id,
+            fileSize: videoNote.file_size,
+            duration: videoNote.duration,
+            length: videoNote.length,
+          }
+        : null;
+    }
+
+    const photo = message.photo
+      ? [...message.photo].sort(
+          (left, right) =>
+            (right.file_size ?? right.width * right.height) -
+            (left.file_size ?? left.width * left.height),
+        )[0]
+      : undefined;
+
+    return photo
+      ? {
+          fileId: photo.file_id,
+          fileUniqueId: photo.file_unique_id,
+          fileSize: photo.file_size,
+          width: photo.width,
+          height: photo.height,
+        }
+      : null;
+  }
+
+  private async sendMediaAssets(
+    chatId: string | number,
+    type: BroadcastMediaAsset['type'],
+  ) {
+    const assets = await this.broadcastMediaAssets.find({
+      where: { type },
+      order: { createdAt: 'DESC' },
+      take: 50,
+    });
+    const label = this.getMediaTypeLabel(type);
+    const choiceButton =
+      type === 'photo' ? BROADCAST_PHOTO_BUTTON : BROADCAST_VIDEO_NOTE_BUTTON;
+
+    if (assets.length === 0) {
+      await this.telegram.sendMessage(chatId, `No saved ${label}s.`);
+      return;
+    }
+
+    await this.telegram.sendMessage(
+      chatId,
+      [
+        `<b>Saved ${label}s</b>`,
+        '',
+        ...assets.map((asset, index) =>
+          [
+            `${index + 1}. <code>${this.escape(asset.key)}</code>`,
+            ...(asset.duration
+              ? [`Duration: ${this.escape(String(asset.duration))} sec`]
+              : []),
+            ...(asset.width && asset.height
+              ? [`Image: ${asset.width}x${asset.height}`]
+              : []),
+            `Size: ${this.formatBytes(asset.fileSize ?? asset.fileData?.length ?? 0)}`,
+            `Use: <code>/broadcast</code> then choose ${choiceButton}`,
+          ].join('\n'),
+        ),
+      ].join('\n\n'),
+    );
+  }
+
+  private async deleteMediaAsset(
+    chatId: string | number,
+    type: BroadcastMediaAsset['type'],
+    rawKey?: string,
+  ) {
+    const key = rawKey ? this.normalizeMediaAssetKey(rawKey) : null;
+    const command = type === 'photo' ? '/delete_photo' : '/delete_video_note';
+    const label = this.getMediaTypeLabel(type);
+    if (!key) {
+      await this.telegram.sendMessage(
+        chatId,
+        `Usage: <code>${command} &lt;key&gt;</code>`,
+      );
+      return;
+    }
+
+    const result = await this.broadcastMediaAssets.delete({
+      type,
+      key,
+    });
+
+    await this.telegram.sendMessage(
+      chatId,
+      result.affected
+        ? `Deleted ${label} <code>${this.escape(key)}</code>.`
+        : `${this.capitalize(label)} <code>${this.escape(key)}</code> not found.`,
+    );
   }
 
   private async startBroadcast(chatId: string | number) {
@@ -1375,6 +1907,139 @@ export class AdminBotService {
     );
   }
 
+  private async startPaymentBroadcast(chatId: string | number) {
+    if (this.broadcastInProgress) {
+      await this.telegram.sendMessage(
+        chatId,
+        'Another broadcast is already running. Try again later.',
+      );
+      return;
+    }
+
+    const products = await this.getPaymentBroadcastProducts();
+    if (products.length === 0) {
+      await this.telegram.sendMessage(chatId, 'No active products found.');
+      return;
+    }
+
+    this.broadcastSessions.set(String(chatId), {
+      step: 'paymentProductChoice',
+    });
+
+    await this.telegram.sendMessage(
+      chatId,
+      [
+        '<b>Payment broadcast</b>',
+        '',
+        'Choose a product for the payment button.',
+        'The user will receive a payment callback button, and the main bot will create an individual WayForPay attempt after click.',
+        `Use ${BROADCAST_CANCEL_BUTTON} or /cancel to cancel.`,
+      ].join('\n'),
+      this.getPaymentBroadcastProductKeyboardMarkup(products),
+    );
+  }
+
+  private async getPaymentBroadcastProducts() {
+    const products = await this.products.find({
+      where: { isActive: true },
+      order: { createdAt: 'ASC' },
+    });
+
+    return products.sort((a, b) => a.slug.localeCompare(b.slug));
+  }
+
+  private async askPaymentBroadcastText(
+    chatId: string | number,
+    product: Product,
+  ) {
+    this.broadcastSessions.set(String(chatId), {
+      step: 'paymentMessage',
+      productSlug: product.slug,
+    });
+
+    await this.telegram.sendMessage(
+      chatId,
+      [
+        `<b>Payment broadcast: ${this.escape(product.title)}</b>`,
+        '',
+        `Price: ${this.escape(product.price)} ${this.escape(product.currency)}`,
+        '',
+        'Send the broadcast text.',
+      ].join('\n'),
+      this.getBroadcastTextKeyboardMarkup(),
+    );
+  }
+
+  private async askPaymentBroadcastButtonText(
+    chatId: string | number,
+    productSlug: string,
+    text: string,
+    media?: BroadcastMedia,
+  ) {
+    const product = await this.products.findOne({
+      where: { slug: productSlug, isActive: true },
+    });
+
+    if (!product) {
+      this.broadcastSessions.delete(String(chatId));
+      await this.telegram.sendMessage(
+        chatId,
+        'Product is no longer available.',
+        this.getRemoveKeyboardMarkup(),
+      );
+      return;
+    }
+
+    this.broadcastSessions.set(String(chatId), {
+      step: 'paymentButtonText',
+      productSlug,
+      text,
+      media,
+    });
+
+    await this.telegram.sendMessage(
+      chatId,
+      [
+        '<b>Payment button</b>',
+        '',
+        'Send the button text.',
+        `Tap ${PAYMENT_BROADCAST_DEFAULT_BUTTON_TEXT_BUTTON} to use: ${this.escape(
+          this.getDefaultPaymentBroadcastButtonText(product),
+        )}`,
+      ].join('\n'),
+      this.getPaymentBroadcastButtonTextKeyboardMarkup(),
+    );
+  }
+
+  private async preparePaymentBroadcastPreview(
+    chatId: string | number,
+    productSlug: string,
+    text: string,
+    media: BroadcastMedia | undefined,
+    buttonText?: string,
+  ) {
+    const product = await this.products.findOne({
+      where: { slug: productSlug, isActive: true },
+    });
+
+    if (!product) {
+      this.broadcastSessions.delete(String(chatId));
+      await this.telegram.sendMessage(
+        chatId,
+        'Product is no longer available.',
+        this.getRemoveKeyboardMarkup(),
+      );
+      return;
+    }
+
+    await this.prepareBroadcastPreview(
+      chatId,
+      text,
+      this.getPaymentBroadcastButton(product, buttonText),
+      media,
+    );
+  }
+
   private async prepareMarathonBroadcastPreview(
     chatId: string | number,
     text: string,
@@ -1391,7 +2056,7 @@ export class AdminBotService {
       return;
     }
 
-    await this.prepareBroadcastPreview(chatId, text, {
+    await this.askBroadcastMediaChoice(chatId, text, {
       ...button,
       text: buttonText ?? button.text,
     });
@@ -1527,12 +2192,206 @@ export class AdminBotService {
     return `${productSlug}:admin:${Date.now()}`;
   }
 
+  private buildGrantedSubscriptionInviteLinkName(user: User) {
+    return `${GRANT_SUBSCRIPTION_PRODUCT_SLUG}:grant:${user.telegramId}:${Date.now()}`;
+  }
+
   private async handleBroadcastStep(
     chatId: string | number,
     text: string,
     command: string,
+    message: TelegramMessage,
     session: BroadcastSession,
   ) {
+    if (session.step === 'paymentProductChoice') {
+      const products = await this.getPaymentBroadcastProducts();
+      const product = this.findPaymentBroadcastProductChoice(text, products);
+
+      if (!product) {
+        await this.telegram.sendMessage(
+          chatId,
+          'Choose a product from the keyboard.',
+          this.getPaymentBroadcastProductKeyboardMarkup(products),
+        );
+        return;
+      }
+
+      await this.askPaymentBroadcastText(chatId, product);
+      return;
+    }
+
+    if (session.step === 'paymentMessage') {
+      if (!text || text.startsWith('/')) {
+        await this.telegram.sendMessage(
+          chatId,
+          'Send a non-empty payment broadcast text or cancel the broadcast.',
+          this.getBroadcastTextKeyboardMarkup(),
+        );
+        return;
+      }
+
+      this.broadcastSessions.set(String(chatId), {
+        step: 'paymentMediaChoice',
+        productSlug: session.productSlug,
+        text,
+      });
+
+      await this.telegram.sendMessage(
+        chatId,
+        [
+          '<b>Payment broadcast media</b>',
+          '',
+          `Choose ${BROADCAST_PHOTO_BUTTON}, ${BROADCAST_VIDEO_NOTE_BUTTON}, or skip media.`,
+        ].join('\n'),
+        this.getBroadcastMediaKeyboardMarkup(),
+      );
+      return;
+    }
+
+    if (session.step === 'paymentMediaChoice') {
+      if (text === BROADCAST_SKIP_MEDIA_BUTTON) {
+        await this.askPaymentBroadcastButtonText(
+          chatId,
+          session.productSlug,
+          session.text,
+        );
+        return;
+      }
+
+      if (
+        text !== BROADCAST_VIDEO_NOTE_BUTTON &&
+        text !== BROADCAST_PHOTO_BUTTON
+      ) {
+        await this.telegram.sendMessage(
+          chatId,
+          'Choose broadcast media or skip it.',
+          this.getBroadcastMediaKeyboardMarkup(),
+        );
+        return;
+      }
+
+      const mediaType =
+        text === BROADCAST_PHOTO_BUTTON ? 'photo' : 'video_note';
+      const label = this.getMediaTypeLabel(mediaType);
+      const listCommand = mediaType === 'photo' ? '/photos' : '/video_notes';
+      this.broadcastSessions.set(String(chatId), {
+        step: mediaType === 'photo' ? 'paymentPhotoKey' : 'paymentVideoNoteKey',
+        productSlug: session.productSlug,
+        text: session.text,
+      });
+
+      await this.telegram.sendMessage(
+        chatId,
+        [
+          `<b>Payment broadcast ${label}</b>`,
+          '',
+          mediaType === 'photo'
+            ? 'Send a saved photo key or upload a photo now.'
+            : `Send saved ${label} key.`,
+          `Use <code>${listCommand}</code> to see saved keys.`,
+        ].join('\n'),
+        this.getBroadcastTextKeyboardMarkup(),
+      );
+      return;
+    }
+
+    if (
+      session.step === 'paymentVideoNoteKey' ||
+      session.step === 'paymentPhotoKey'
+    ) {
+      const type = session.step === 'paymentPhotoKey' ? 'photo' : 'video_note';
+      const label = this.getMediaTypeLabel(type);
+      const listCommand = type === 'photo' ? '/photos' : '/video_notes';
+
+      if (type === 'photo' && message.photo?.length) {
+        const result = await this.saveBroadcastMediaAssetFromMessage(
+          message,
+          'photo',
+          this.buildAutoBroadcastMediaKey('photo'),
+        );
+        if (!result.ok) {
+          await this.telegram.sendMessage(chatId, result.message);
+          return;
+        }
+
+        await this.askPaymentBroadcastButtonText(
+          chatId,
+          session.productSlug,
+          session.text,
+          {
+            type,
+            assetId: result.asset.id,
+            key: result.asset.key,
+          },
+        );
+        return;
+      }
+
+      const key = this.normalizeMediaAssetKey(text);
+      if (!key) {
+        await this.telegram.sendMessage(
+          chatId,
+          `Send a valid ${label} key, or /cancel.`,
+          this.getBroadcastTextKeyboardMarkup(),
+        );
+        return;
+      }
+
+      const asset = await this.broadcastMediaAssets.findOne({
+        where: { type, key },
+      });
+      if (!asset) {
+        await this.telegram.sendMessage(
+          chatId,
+          `${this.capitalize(label)} <code>${this.escape(key)}</code> not found. Use <code>${listCommand}</code> or /cancel.`,
+          this.getBroadcastTextKeyboardMarkup(),
+        );
+        return;
+      }
+
+      await this.askPaymentBroadcastButtonText(
+        chatId,
+        session.productSlug,
+        session.text,
+        {
+          type,
+          assetId: asset.id,
+          key: asset.key,
+        },
+      );
+      return;
+    }
+
+    if (session.step === 'paymentButtonText') {
+      if (text === PAYMENT_BROADCAST_DEFAULT_BUTTON_TEXT_BUTTON) {
+        await this.preparePaymentBroadcastPreview(
+          chatId,
+          session.productSlug,
+          session.text,
+          session.media,
+        );
+        return;
+      }
+
+      if (!text || text.startsWith('/')) {
+        await this.telegram.sendMessage(
+          chatId,
+          'Send a non-empty payment button text or cancel the broadcast.',
+          this.getPaymentBroadcastButtonTextKeyboardMarkup(),
+        );
+        return;
+      }
+
+      await this.preparePaymentBroadcastPreview(
+        chatId,
+        session.productSlug,
+        session.text,
+        session.media,
+        text,
+      );
+      return;
+    }
+
     if (session.step === 'marathonMessage') {
       if (text === MARATHON_DEFAULT_TEXT_BUTTON) {
         await this.askMarathonBroadcastButtonText(
@@ -1604,7 +2463,7 @@ export class AdminBotService {
 
     if (session.step === 'buttonText') {
       if (text === BROADCAST_SKIP_BUTTON) {
-        await this.prepareBroadcastPreview(chatId, session.text);
+        await this.askBroadcastMediaChoice(chatId, session.text);
         return;
       }
 
@@ -1647,9 +2506,115 @@ export class AdminBotService {
         return;
       }
 
-      await this.prepareBroadcastPreview(chatId, session.text, {
+      await this.askBroadcastMediaChoice(chatId, session.text, {
         text: session.buttonText,
         url: buttonUrl,
+      });
+      return;
+    }
+
+    if (session.step === 'mediaChoice') {
+      if (text === BROADCAST_SKIP_MEDIA_BUTTON) {
+        await this.prepareBroadcastPreview(
+          chatId,
+          session.text,
+          session.button,
+        );
+        return;
+      }
+
+      if (
+        text !== BROADCAST_VIDEO_NOTE_BUTTON &&
+        text !== BROADCAST_PHOTO_BUTTON
+      ) {
+        await this.telegram.sendMessage(
+          chatId,
+          'Choose broadcast media or skip it.',
+          this.getBroadcastMediaKeyboardMarkup(),
+        );
+        return;
+      }
+
+      const mediaType =
+        text === BROADCAST_PHOTO_BUTTON ? 'photo' : 'video_note';
+      const label = this.getMediaTypeLabel(mediaType);
+      const listCommand = mediaType === 'photo' ? '/photos' : '/video_notes';
+      this.broadcastSessions.set(String(chatId), {
+        step: mediaType === 'photo' ? 'photoKey' : 'videoNoteKey',
+        text: session.text,
+        button: session.button,
+      });
+
+      await this.telegram.sendMessage(
+        chatId,
+        [
+          `<b>Broadcast ${label}</b>`,
+          '',
+          mediaType === 'photo'
+            ? 'Send a saved photo key or upload a photo now.'
+            : `Send saved ${label} key.`,
+          `Use <code>${listCommand}</code> to see saved keys.`,
+        ].join('\n'),
+        this.getBroadcastTextKeyboardMarkup(),
+      );
+      return;
+    }
+
+    if (session.step === 'videoNoteKey' || session.step === 'photoKey') {
+      const type = session.step === 'photoKey' ? 'photo' : 'video_note';
+      const label = this.getMediaTypeLabel(type);
+      const listCommand = type === 'photo' ? '/photos' : '/video_notes';
+
+      if (type === 'photo' && message.photo?.length) {
+        const result = await this.saveBroadcastMediaAssetFromMessage(
+          message,
+          'photo',
+          this.buildAutoBroadcastMediaKey('photo'),
+        );
+        if (!result.ok) {
+          await this.telegram.sendMessage(chatId, result.message);
+          return;
+        }
+
+        await this.prepareBroadcastPreview(
+          chatId,
+          session.text,
+          session.button,
+          {
+            type,
+            assetId: result.asset.id,
+            key: result.asset.key,
+          },
+        );
+        return;
+      }
+
+      const key = this.normalizeMediaAssetKey(text);
+      if (!key) {
+        await this.telegram.sendMessage(
+          chatId,
+          `Send a valid ${label} key, or /cancel.`,
+          this.getBroadcastTextKeyboardMarkup(),
+        );
+        return;
+      }
+
+      const asset = await this.broadcastMediaAssets.findOne({
+        where: { type, key },
+      });
+      if (!asset) {
+        await this.telegram.sendMessage(
+          chatId,
+          `${this.capitalize(label)} <code>${this.escape(key)}</code> not found. Use <code>${listCommand}</code> or /cancel.`,
+          this.getBroadcastTextKeyboardMarkup(),
+        );
+        return;
+      }
+
+      await this.prepareBroadcastPreview(chatId, session.text, session.button, {
+        type,
+        assetId: asset.id,
+        key: asset.key,
       });
       return;
     }
@@ -1686,22 +2651,49 @@ export class AdminBotService {
         this.getRemoveKeyboardMarkup(),
       );
 
-      void this.runBroadcast(chatId, session.text, session.button).catch(
-        async (error: unknown) => {
-          await this.telegram.sendMessage(
-            chatId,
-            `Broadcast failed: ${this.escape(error instanceof Error ? error.message : String(error))}`,
-            this.getRemoveKeyboardMarkup(),
-          );
-        },
-      );
+      void this.runBroadcast(
+        chatId,
+        session.text,
+        session.button,
+        session.media,
+        session.recipientsCount,
+      ).catch(async (error: unknown) => {
+        await this.telegram.sendMessage(
+          chatId,
+          `Broadcast failed: ${this.escape(error instanceof Error ? error.message : String(error))}`,
+          this.getRemoveKeyboardMarkup(),
+        );
+      });
     }
+  }
+
+  private async askBroadcastMediaChoice(
+    chatId: string | number,
+    text: string,
+    button?: BroadcastButton,
+  ) {
+    this.broadcastSessions.set(String(chatId), {
+      step: 'mediaChoice',
+      text,
+      button,
+    });
+
+    await this.telegram.sendMessage(
+      chatId,
+      [
+        '<b>Broadcast media</b>',
+        '',
+        `Choose ${BROADCAST_PHOTO_BUTTON}, ${BROADCAST_VIDEO_NOTE_BUTTON}, or skip media.`,
+      ].join('\n'),
+      this.getBroadcastMediaKeyboardMarkup(),
+    );
   }
 
   private async prepareBroadcastPreview(
     chatId: string | number,
     text: string,
     button?: BroadcastButton,
+    media?: BroadcastMedia,
   ) {
     const recipientsCount = await this.users.count();
     if (recipientsCount === 0) {
@@ -1719,6 +2711,7 @@ export class AdminBotService {
       text,
       recipientsCount,
       button,
+      media,
     });
 
     await this.telegram.sendMessage(
@@ -1737,6 +2730,9 @@ export class AdminBotService {
               '',
             ]
           : []),
+        ...(media
+          ? [`Media: ${this.escape(media.key)} (${media.type})`, '']
+          : []),
         `Recipients: ${recipientsCount}`,
       ].join('\n'),
       this.getBroadcastInlineButtonMarkup(button),
@@ -1753,6 +2749,8 @@ export class AdminBotService {
     chatId: string | number,
     text: string,
     button?: BroadcastButton,
+    media?: BroadcastMedia,
+    recipientsCount = 0,
   ) {
     let sent = 0;
     let failed = 0;
@@ -1760,6 +2758,23 @@ export class AdminBotService {
     let offset = 0;
     const escapedText = this.escape(text);
     const replyMarkup = this.getBroadcastInlineButtonMarkup(button);
+    const mediaAsset = media
+      ? await this.broadcastMediaAssets.findOne({
+          where: { id: media.assetId },
+        })
+      : null;
+    const broadcast = await this.broadcastCampaigns.save(
+      this.broadcastCampaigns.create({
+        text,
+        buttonText: button?.text ?? null,
+        buttonUrl: button?.url ?? null,
+        buttonCallbackData: button?.callbackData ?? null,
+        mediaType: media?.type ?? null,
+        mediaKey: media?.key ?? null,
+        createdByTelegramId: String(chatId),
+        recipientsCount,
+      }),
+    );
 
     try {
       while (true) {
@@ -1780,14 +2795,65 @@ export class AdminBotService {
             continue;
           }
 
+          if (mediaAsset?.type === 'video_note') {
+            const videoNoteResponse = await this.mainTelegram.sendVideoNoteFile(
+              user.telegramId,
+              mediaAsset.fileData,
+            );
+
+            const messageId = this.getResponseMessageId(videoNoteResponse);
+            if (videoNoteResponse.ok && messageId) {
+              sent += 1;
+              await this.saveBroadcastDelivery(
+                broadcast.id,
+                user.telegramId,
+                messageId,
+                'video_note',
+              );
+            } else {
+              failed += 1;
+            }
+
+            await this.sleep(BROADCAST_SEND_DELAY_MS);
+          }
+
+          if (mediaAsset?.type === 'photo') {
+            const photoResponse = await this.mainTelegram.sendPhotoBuffer(
+              user.telegramId,
+              mediaAsset.fileData,
+            );
+
+            const messageId = this.getResponseMessageId(photoResponse);
+            if (photoResponse.ok && messageId) {
+              sent += 1;
+              await this.saveBroadcastDelivery(
+                broadcast.id,
+                user.telegramId,
+                messageId,
+                'photo',
+              );
+            } else {
+              failed += 1;
+            }
+
+            await this.sleep(BROADCAST_SEND_DELAY_MS);
+          }
+
           const response = (await this.mainTelegram.sendMessage(
             user.telegramId,
             escapedText,
             replyMarkup,
-          )) as { ok: boolean };
+          )) as { ok: boolean; result?: { message_id?: number } };
 
-          if (response.ok) {
+          const messageId = this.getResponseMessageId(response);
+          if (response.ok && messageId) {
             sent += 1;
+            await this.saveBroadcastDelivery(
+              broadcast.id,
+              user.telegramId,
+              messageId,
+              'text',
+            );
           } else {
             failed += 1;
           }
@@ -1798,19 +2864,168 @@ export class AdminBotService {
         offset += users.length;
       }
 
+      broadcast.sentCount = sent;
+      broadcast.failedCount = failed;
+      broadcast.skippedCount = skipped;
+      await this.broadcastCampaigns.save(broadcast);
+
       await this.telegram.sendMessage(
         chatId,
         [
           '✅ <b>Broadcast finished</b>',
           '',
+          `ID: <code>${this.escape(broadcast.id)}</code>`,
           `Sent: ${sent}`,
           `Failed: ${failed}`,
           `Skipped: ${skipped}`,
+          '',
+          `Delete: <code>/delete_broadcast ${this.escape(broadcast.id)}</code>`,
         ].join('\n'),
       );
     } finally {
       this.broadcastInProgress = false;
     }
+  }
+
+  private getResponseMessageId(response: { result?: unknown }) {
+    const result = response.result as { message_id?: unknown } | undefined;
+    return typeof result?.message_id === 'number' && result.message_id > 0
+      ? result.message_id
+      : null;
+  }
+
+  private async saveBroadcastDelivery(
+    broadcastId: string,
+    telegramId: string,
+    messageId: number,
+    messageType: BroadcastDelivery['messageType'],
+  ) {
+    await this.broadcastDeliveries.save(
+      this.broadcastDeliveries.create({
+        broadcastId,
+        telegramId,
+        messageId,
+        messageType,
+      }),
+    );
+  }
+
+  private async sendBroadcasts(chatId: string | number) {
+    const broadcasts = await this.broadcastCampaigns.find({
+      order: { createdAt: 'DESC' },
+      take: 10,
+    });
+
+    if (broadcasts.length === 0) {
+      await this.telegram.sendMessage(chatId, 'No broadcasts yet.');
+      return;
+    }
+
+    await this.telegram.sendMessage(
+      chatId,
+      [
+        '<b>Recent broadcasts</b>',
+        '',
+        ...broadcasts.map((broadcast, index) =>
+          [
+            `${index + 1}. <code>${this.escape(broadcast.id)}</code>`,
+            `Created: ${this.formatDate(broadcast.createdAt)}`,
+            `Sent messages: ${broadcast.sentCount}`,
+            `Failed: ${broadcast.failedCount}`,
+            broadcast.deleteRequestedAt
+              ? `Deleted: ${broadcast.deletedCount}, delete failed: ${broadcast.deleteFailedCount}`
+              : 'Delete status: not requested',
+            broadcast.mediaType
+              ? `Media: ${this.escape(broadcast.mediaKey ?? broadcast.mediaType)} (${this.escape(broadcast.mediaType)})`
+              : 'Media: -',
+            `Text: ${this.escape(this.truncate(broadcast.text, 120))}`,
+            `Delete: <code>/delete_broadcast ${this.escape(broadcast.id)}</code>`,
+          ].join('\n'),
+        ),
+      ].join('\n\n'),
+    );
+  }
+
+  private async deleteBroadcast(chatId: string | number, broadcastId?: string) {
+    if (!broadcastId) {
+      await this.telegram.sendMessage(
+        chatId,
+        'Usage: <code>/delete_broadcast &lt;broadcast_id&gt;</code>',
+      );
+      return;
+    }
+
+    const broadcast = await this.broadcastCampaigns.findOne({
+      where: { id: broadcastId },
+    });
+
+    if (!broadcast) {
+      await this.telegram.sendMessage(chatId, 'Broadcast not found.');
+      return;
+    }
+
+    const deliveries = await this.broadcastDeliveries.find({
+      where: { broadcastId },
+      order: { sentAt: 'ASC' },
+    });
+
+    if (deliveries.length === 0) {
+      await this.telegram.sendMessage(
+        chatId,
+        'Broadcast has no saved messages to delete.',
+      );
+      return;
+    }
+
+    let deleted = 0;
+    let failed = 0;
+    let alreadyDeleted = 0;
+
+    await this.telegram.sendMessage(
+      chatId,
+      `Deleting ${deliveries.length} broadcast messages...`,
+    );
+
+    for (const delivery of deliveries) {
+      if (delivery.deletedAt) {
+        alreadyDeleted += 1;
+        continue;
+      }
+
+      const response = await this.mainTelegram.deleteMessage(
+        delivery.telegramId,
+        delivery.messageId,
+      );
+
+      if (response.ok) {
+        deleted += 1;
+        delivery.deletedAt = new Date();
+        delivery.deleteError = null;
+      } else {
+        failed += 1;
+        delivery.deleteError = response.description ?? 'Unknown error';
+      }
+
+      await this.broadcastDeliveries.save(delivery);
+      await this.sleep(BROADCAST_SEND_DELAY_MS);
+    }
+
+    broadcast.deleteRequestedAt = new Date();
+    broadcast.deletedCount = alreadyDeleted + deleted;
+    broadcast.deleteFailedCount = failed;
+    await this.broadcastCampaigns.save(broadcast);
+
+    await this.telegram.sendMessage(
+      chatId,
+      [
+        '✅ <b>Broadcast delete finished</b>',
+        '',
+        `ID: <code>${this.escape(broadcast.id)}</code>`,
+        `Deleted now: ${deleted}`,
+        `Already deleted: ${alreadyDeleted}`,
+        `Failed: ${failed}`,
+      ].join('\n'),
+    );
   }
 
   private async sendSupport(chatId: string | number) {
@@ -2117,6 +3332,21 @@ export class AdminBotService {
     return username;
   }
 
+  private normalizeMediaAssetKey(value: string) {
+    const key = value.trim();
+
+    if (!/^[A-Za-z0-9_-]{2,64}$/.test(key)) {
+      return null;
+    }
+
+    return key;
+  }
+
+  private buildAutoBroadcastMediaKey(type: BroadcastMediaAsset['type']) {
+    const random = Math.random().toString(36).slice(2, 8);
+    return `broadcast_${type}_${Date.now()}_${random}`;
+  }
+
   private normalizeBroadcastButtonUrl(value: string) {
     const text = value.trim();
 
@@ -2130,6 +3360,39 @@ export class AdminBotService {
     } catch {
       return null;
     }
+  }
+
+  private formatPaymentBroadcastProductChoice(product: Product) {
+    return `${product.title} (${product.slug}) - ${product.price} ${product.currency}`;
+  }
+
+  private findPaymentBroadcastProductChoice(
+    value: string,
+    products: Product[],
+  ) {
+    const text = value.trim();
+    const slugMatch = text.match(/\(([^)]+)\)/);
+    const slug = slugMatch?.[1] ?? text;
+
+    return products.find(
+      (product) =>
+        product.slug === slug ||
+        this.formatPaymentBroadcastProductChoice(product) === text,
+    );
+  }
+
+  private getDefaultPaymentBroadcastButtonText(product: Product) {
+    return `Оплатить ${product.price} ${product.currency}`;
+  }
+
+  private getPaymentBroadcastButton(
+    product: Product,
+    buttonText?: string,
+  ): CallbackBroadcastButton {
+    return {
+      text: buttonText ?? this.getDefaultPaymentBroadcastButtonText(product),
+      callbackData: `${PAYMENT_CALLBACK_PREFIX}${product.slug}`,
+    };
   }
 
   private parseSubscriptionEndDate(value: string) {
@@ -2276,6 +3539,32 @@ export class AdminBotService {
       hour: '2-digit',
       minute: '2-digit',
     });
+  }
+
+  private formatBytes(bytes: number) {
+    if (bytes < 1024) {
+      return `${bytes} B`;
+    }
+
+    if (bytes < 1024 * 1024) {
+      return `${(bytes / 1024).toFixed(1)} KB`;
+    }
+
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  private getMediaTypeLabel(type: BroadcastMediaAsset['type']) {
+    return type === 'photo' ? 'photo' : 'video note';
+  }
+
+  private capitalize(value: string) {
+    return value.charAt(0).toUpperCase() + value.slice(1);
+  }
+
+  private truncate(value: string, maxLength: number) {
+    return value.length > maxLength
+      ? `${value.slice(0, Math.max(0, maxLength - 3))}...`
+      : value;
   }
 
   private escape(value: string) {

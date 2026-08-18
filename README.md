@@ -67,6 +67,7 @@ ADMIN_TELEGRAM_BOT_TOKEN=your_admin_bot_token
 MANAGER_TELEGRAM_ID=your_telegram_id
 MARATHON_CHANNEL_CHAT_ID=
 MARATHON_INVITE_EXPIRES_IN_SECONDS=
+KEYWORD_RESPONSE_WORD=
 PORT=3000
 ```
 
@@ -123,6 +124,11 @@ src/bot/bot-flow.json
 ```
 
 The config controls screen text, inline buttons, reply keyboard labels, support topics, payment prompt copy, and subscription messages.
+
+Set `KEYWORD_RESPONSE_WORD` to enable an exact private-message keyword response.
+The response text is configured in `keywordResponse.message` inside
+`src/bot/bot-flow.json`. Local files from the `files` directory can be sent
+with `keywordResponse.documentFiles`.
 
 Screens can send local images from the `files` directory before the inline
 buttons. Use `photoFile` for one image or `photoFiles` for several images:
@@ -346,7 +352,8 @@ Then it:
 
 Set `CLOSED_GROUP_CHAT_ID` to the closed Telegram group chat ID.
 
-The main bot from `TELEGRAM_BOT_TOKEN` must be added to that group as an admin with permission to ban users.
+The main bot from `TELEGRAM_BOT_TOKEN` must be added to that group as an admin
+with permission to ban users and create invite links.
 
 Every hour, the app finds active subscriptions whose `expires_at` is in the past. For each expired subscription it:
 
@@ -471,7 +478,8 @@ commands that require a Telegram ID.
 2. Send the subscription end date, for example `31.12.2026` or `2026-12-31`.
 
 The command grants access to the `the-cycle` subscription product until the
-given date.
+given date. After access is granted, the main bot creates a single-use invite
+link for `CLOSED_GROUP_CHAT_ID` and sends it to the user.
 
 `/broadcast` starts a text broadcast from the main bot:
 
