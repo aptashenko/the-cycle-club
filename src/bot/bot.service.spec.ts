@@ -1,3 +1,4 @@
+import { ConfigService } from '@nestjs/config';
 import { ProductType } from '../common/enums';
 import { AttributionService } from '../attribution/attribution.service';
 import { LiveEventsService } from '../live-events/live-events.service';
@@ -19,12 +20,13 @@ describe('BotService support flow', () => {
     telegramId: '123456',
   } as User;
 
-  const buildService = () => {
+  const buildService = (env: Record<string, string> = {}) => {
     const telegram = {
       answerCallbackQuery: jest.fn().mockResolvedValue(undefined),
       sendMessage: jest.fn().mockResolvedValue(undefined),
       sendPhotoFile: jest.fn().mockResolvedValue({ ok: true }),
       sendPhotoMediaGroup: jest.fn().mockResolvedValue(undefined),
+      sendDocumentFile: jest.fn().mockResolvedValue({ ok: true }),
     } as unknown as jest.Mocked<TelegramApiService>;
     const users = {
       upsertTelegramUser: jest.fn().mockResolvedValue(user),
@@ -48,6 +50,11 @@ describe('BotService support flow', () => {
       notifyProductAccessBySubscription: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<NotificationService>;
     const flow = new BotFlowService();
+    const config = {
+      get: jest.fn(
+        (key: string, defaultValue?: string) => env[key] ?? defaultValue,
+      ),
+    } as unknown as jest.Mocked<ConfigService>;
 
     const service = new BotService(
       telegram,
@@ -61,6 +68,7 @@ describe('BotService support flow', () => {
       activity,
       attribution,
       flow,
+      config,
     );
 
     return {
@@ -72,6 +80,7 @@ describe('BotService support flow', () => {
       notifications,
       attribution,
       flow,
+      config,
     };
   };
 
@@ -177,6 +186,51 @@ describe('BotService support flow', () => {
     );
   });
 
+  it('sends configured keyword response when env keyword matches', async () => {
+    const { service, telegram, flow } = buildService({
+      KEYWORD_RESPONSE_WORD: 'special',
+    });
+
+    await service.handleUpdate({
+      update_id: 1,
+      message: {
+        message_id: 11,
+        from: { id: 123456, first_name: 'Jane' },
+        chat: { id: 123456, type: 'private' },
+        text: 'special',
+      },
+    });
+
+    expect(telegram.sendMessage).toHaveBeenCalledWith(
+      123456,
+      flow.getKeywordResponseMessage(),
+    );
+    expect(telegram.sendDocumentFile).toHaveBeenCalledWith(
+      123456,
+      expect.stringContaining('files/sekrety_biohaking.pdf'),
+      'sekrety_biohaking.pdf',
+    );
+  });
+
+  it('does not handle keyword response when env keyword is empty', async () => {
+    const { service, telegram, flow } = buildService();
+
+    await service.handleUpdate({
+      update_id: 1,
+      message: {
+        message_id: 11,
+        from: { id: 123456, first_name: 'Jane' },
+        chat: { id: 123456, type: 'private' },
+        text: 'special',
+      },
+    });
+
+    expect(telegram.sendMessage).not.toHaveBeenCalledWith(
+      123456,
+      flow.getKeywordResponseMessage(),
+    );
+  });
+
   it('registers user for free live event from callback', async () => {
     const { service, telegram, liveEvents, activity } = buildService();
 
@@ -225,6 +279,7 @@ describe('BotService support flow', () => {
       sendMessage: jest.fn().mockResolvedValue(undefined),
       sendPhotoFile: jest.fn().mockResolvedValue({ ok: true }),
       sendPhotoMediaGroup: jest.fn().mockResolvedValue(undefined),
+      sendDocumentFile: jest.fn().mockResolvedValue({ ok: true }),
     } as unknown as jest.Mocked<TelegramApiService>;
     const users = {
       upsertTelegramUser: jest.fn().mockResolvedValue(user),
@@ -286,6 +341,9 @@ describe('BotService support flow', () => {
       activity,
       attribution,
       new BotFlowService(),
+      {
+        get: jest.fn((_key: string, defaultValue?: string) => defaultValue),
+      } as unknown as ConfigService,
     );
 
     await service.handleUpdate({

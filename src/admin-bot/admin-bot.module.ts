@@ -13,6 +13,9 @@ import { AdminBotController } from './admin-bot.controller';
 import { AdminBotPollingService } from './admin-bot-polling.service';
 import { AdminBotService } from './admin-bot.service';
 import { AdminTelegramApiService } from './admin-telegram-api.service';
+import { BroadcastCampaign } from './broadcast-campaign.entity';
+import { BroadcastDelivery } from './broadcast-delivery.entity';
+import { BroadcastMediaAsset } from './broadcast-media-asset.entity';
 
 @Module({
   imports: [
@@ -24,6 +27,9 @@ import { AdminTelegramApiService } from './admin-telegram-api.service';
       PaymentAttempt,
       SupportRequest,
       UserActivityEvent,
+      BroadcastMediaAsset,
+      BroadcastCampaign,
+      BroadcastDelivery,
     ]),
   ],
   controllers: [AdminBotController],
