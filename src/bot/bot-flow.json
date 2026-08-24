@@ -9,20 +9,8 @@
       "buttons": [
         [
           {
-            "text": "\uD83C\uDF38 Клуб The Cycle",
-            "target": "the-cycle"
-          }
-        ],
-        [
-          {
             "text": "\uD83D\uDCDA Материалы",
             "target": "materials"
-          }
-        ],
-        [
-          {
-            "text": "\uD83E\uDD51 Запись на марафон",
-            "target": "marathon"
           }
         ],
         [
