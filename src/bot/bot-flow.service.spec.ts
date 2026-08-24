@@ -12,13 +12,19 @@ describe('BotFlowService', () => {
     expect(service.getScreenText('welcome').length).toBeGreaterThan(0);
   });
 
-  it('builds callbacks for screen transitions and payment actions', () => {
+  it('builds callbacks for screen transitions without The Cycle payment action', () => {
     const keyboard = service.buildScreenInlineKeyboard('the-cycle', {
       hasActiveSubscription: false,
     });
 
-    expect(keyboard?.[0]?.[0]?.callback_data).toBe('payment:start:the-cycle');
-    expect(keyboard?.[1]?.[0]?.callback_data).toBe('flow:the-cycle-inside');
+    expect(keyboard).toEqual([
+      [
+        {
+          text: '🔍 Что внутри?',
+          callback_data: 'flow:the-cycle-inside',
+        },
+      ],
+    ]);
   });
 
   it('builds callbacks and link keyboard for live event registration', () => {
@@ -50,13 +56,16 @@ describe('BotFlowService', () => {
     });
   });
 
-  it('uses active subscription button text when provided', () => {
+  it('does not render a The Cycle payment button for active subscribers', () => {
     const keyboard = service.buildScreenInlineKeyboard('the-cycle', {
       hasActiveSubscription: true,
     });
 
-    expect(keyboard?.[0]?.[0]?.callback_data).toBe('payment:start:the-cycle');
-    expect(keyboard?.[0]?.[0]?.text.length).toBeGreaterThan(0);
+    expect(keyboard?.flat()).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ callback_data: 'payment:start:the-cycle' }),
+      ]),
+    );
   });
 
   it('shows club link only for active The Cycle subscription', () => {
@@ -68,7 +77,7 @@ describe('BotFlowService', () => {
     });
 
     expect(inactiveKeyboard?.flat().some((button) => button.url)).toBe(false);
-    expect(activeKeyboard?.[1]?.[0]).toEqual({
+    expect(activeKeyboard?.[0]?.[0]).toEqual({
       text: 'Перейти в клуб',
       url: 'https://telegram.me/+idivZ5snYSo1OTUy',
     });

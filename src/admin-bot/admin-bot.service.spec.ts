@@ -836,9 +836,9 @@ describe('AdminBotService', () => {
 
     await service.handleUpdate(adminMessage('/broadcast_payment'));
     await service.handleUpdate(
-      adminMessage('The Cycle (the-cycle) - 899.00 UAH'),
+      adminMessage('Марафон по детоксу - 4 поток (marathon-4) - 1499.00 UAH'),
     );
-    await service.handleUpdate(adminMessage('Текст рассылки про клуб'));
+    await service.handleUpdate(adminMessage('Текст рассылки про марафон'));
     await service.handleUpdate(adminMessage('Без медиа'));
     await service.handleUpdate(adminMessage('Стандартная кнопка оплаты'));
     await service.handleUpdate(adminMessage('✅ Подтвердить рассылку'));
@@ -848,19 +848,25 @@ describe('AdminBotService', () => {
       expect.stringContaining('Choose a product for the payment button.'),
       expect.objectContaining({
         keyboard: expect.arrayContaining([
-          [{ text: 'The Cycle (the-cycle) - 899.00 UAH' }],
+          [
+            {
+              text: 'Марафон по детоксу - 4 поток (marathon-4) - 1499.00 UAH',
+            },
+          ],
         ]),
       }),
     );
     expect(adminTelegram.sendMessage).toHaveBeenCalledWith(
       123,
-      expect.stringContaining('Callback: <code>payment:start:the-cycle</code>'),
+      expect.stringContaining(
+        'Callback: <code>payment:start:marathon-4</code>',
+      ),
       {
         inline_keyboard: [
           [
             {
-              text: 'Оплатить 899.00 UAH',
-              callback_data: 'payment:start:the-cycle',
+              text: 'Оплатить 1499.00 UAH',
+              callback_data: 'payment:start:marathon-4',
             },
           ],
         ],
@@ -868,10 +874,10 @@ describe('AdminBotService', () => {
     );
     expect(runBroadcast).toHaveBeenCalledWith(
       123,
-      'Текст рассылки про клуб',
+      'Текст рассылки про марафон',
       {
-        text: 'Оплатить 899.00 UAH',
-        callbackData: 'payment:start:the-cycle',
+        text: 'Оплатить 1499.00 UAH',
+        callbackData: 'payment:start:marathon-4',
       },
       undefined,
       1,

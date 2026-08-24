@@ -149,8 +149,9 @@ export class BotService {
       return;
     }
 
-    const pendingConsultationProductSlug =
-      this.pendingConsultationPayments.get(user.id);
+    const pendingConsultationProductSlug = this.pendingConsultationPayments.get(
+      user.id,
+    );
     if (pendingConsultationProductSlug) {
       await this.sendPhoneNumberRequest(message.chat.id);
       return;
@@ -284,7 +285,9 @@ export class BotService {
     if (data === LEGACY_CALLBACKS.joinTheCycle) {
       this.pendingSupportMessages.delete(user.id);
       this.pendingConsultationPayments.delete(user.id);
-      await this.startProductPayment(chatId, user, 'the-cycle');
+      await this.sendTheCyclePaymentDisabledMessage(chatId);
+      // The Cycle payment flow is disabled.
+      // await this.startProductPayment(chatId, user, 'the-cycle');
       return;
     }
 
@@ -300,6 +303,10 @@ export class BotService {
       this.flow.getPaymentProductSlugFromCallback(data);
     if (paymentProductSlug) {
       this.pendingSupportMessages.delete(user.id);
+      if (paymentProductSlug === THE_CYCLE_SLUG) {
+        await this.sendTheCyclePaymentDisabledMessage(chatId);
+        return;
+      }
       await this.startProductPayment(chatId, user, paymentProductSlug);
       return;
     }
@@ -622,6 +629,11 @@ export class BotService {
     user: User,
     productSlug: string,
   ) {
+    if (productSlug === THE_CYCLE_SLUG) {
+      await this.sendTheCyclePaymentDisabledMessage(chatId);
+      return;
+    }
+
     const product = await this.products.getActiveProductBySlug(productSlug);
 
     if (this.requiresPhoneNumberBeforePayment(product) && !user.phoneNumber) {
@@ -695,6 +707,13 @@ export class BotService {
           ],
         ],
       },
+    );
+  }
+
+  private async sendTheCyclePaymentDisabledMessage(chatId: string | number) {
+    await this.telegram.sendMessage(
+      chatId,
+      'Оплата The Cycle сейчас недоступна.',
     );
   }
 

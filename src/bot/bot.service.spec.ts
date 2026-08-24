@@ -518,4 +518,64 @@ describe('BotService support flow', () => {
     ).toHaveBeenCalledWith(user, material);
     expect(payments.createWayForPayAttempt).not.toHaveBeenCalled();
   });
+
+  it('does not start payment for legacy The Cycle payment callbacks', async () => {
+    const telegram = {
+      answerCallbackQuery: jest.fn().mockResolvedValue(undefined),
+      sendMessage: jest.fn().mockResolvedValue(undefined),
+      sendPhotoFile: jest.fn().mockResolvedValue({ ok: true }),
+      sendPhotoMediaGroup: jest.fn().mockResolvedValue(undefined),
+      sendDocumentFile: jest.fn().mockResolvedValue({ ok: true }),
+    } as unknown as jest.Mocked<TelegramApiService>;
+    const users = {
+      upsertTelegramUser: jest.fn().mockResolvedValue(user),
+    } as unknown as jest.Mocked<UserService>;
+    const products = {
+      getActiveProductBySlug: jest.fn(),
+    } as unknown as jest.Mocked<ProductService>;
+    const payments = {
+      createWayForPayAttempt: jest.fn(),
+    } as unknown as jest.Mocked<PaymentService>;
+
+    const service = new BotService(
+      telegram,
+      users,
+      products,
+      {} as SubscriptionService,
+      payments,
+      {
+        notifyProductAccessBySubscription: jest.fn(),
+      } as unknown as NotificationService,
+      { create: jest.fn() } as unknown as SupportService,
+      { register: jest.fn() } as unknown as LiveEventsService,
+      {
+        track: jest.fn().mockResolvedValue(undefined),
+      } as unknown as UserActivityService,
+      { attachTelegramUser: jest.fn() } as unknown as AttributionService,
+      new BotFlowService(),
+      {
+        get: jest.fn((_key: string, defaultValue?: string) => defaultValue),
+      } as unknown as ConfigService,
+    );
+
+    await service.handleUpdate({
+      update_id: 1,
+      callback_query: {
+        id: 'callback-id',
+        from: { id: 123456, first_name: 'Jane' },
+        message: {
+          message_id: 10,
+          chat: { id: 123456, type: 'private' },
+        },
+        data: 'payment:start:the-cycle',
+      },
+    });
+
+    expect(telegram.sendMessage).toHaveBeenCalledWith(
+      123456,
+      'Оплата The Cycle сейчас недоступна.',
+    );
+    expect(products.getActiveProductBySlug).not.toHaveBeenCalled();
+    expect(payments.createWayForPayAttempt).not.toHaveBeenCalled();
+  });
 });

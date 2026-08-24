@@ -29,6 +29,9 @@ const RESOLVE_SUPPORT_PREFIX = 'support:resolve:';
 const REPLY_SUPPORT_PREFIX = 'support:reply:';
 const ADMIN_MENU_PREFIX = 'admin:menu:';
 const GRANT_SUBSCRIPTION_PRODUCT_SLUG = 'the-cycle';
+const PAYMENT_BROADCAST_EXCLUDED_PRODUCT_SLUGS = new Set([
+  GRANT_SUBSCRIPTION_PRODUCT_SLUG,
+]);
 const MARATHON_BROADCAST_SCREEN_ID = 'marathon';
 const MARATHON_BROADCAST_PRODUCT_SLUG = 'marathon-4';
 const MARATHON_PRODUCT_SLUG_PREFIX = 'marathon-';
@@ -46,7 +49,8 @@ const BROADCAST_VIDEO_NOTE_BUTTON = '🎥 Кружочек';
 const BROADCAST_PHOTO_BUTTON = '🖼 Фото';
 const MARATHON_DEFAULT_TEXT_BUTTON = 'Стандартный текст';
 const MARATHON_DEFAULT_BUTTON_TEXT_BUTTON = 'Стандартная кнопка';
-const PAYMENT_BROADCAST_DEFAULT_BUTTON_TEXT_BUTTON = 'Стандартная кнопка оплаты';
+const PAYMENT_BROADCAST_DEFAULT_BUTTON_TEXT_BUTTON =
+  'Стандартная кнопка оплаты';
 const ADMIN_MENU_BUTTON = '☰ Меню';
 const ADMIN_STATS_BUTTON = '📊 Статистика';
 const ADMIN_MARATHON_MENU_BUTTON = '🏁 Марафон';
@@ -1945,7 +1949,12 @@ export class AdminBotService {
       order: { createdAt: 'ASC' },
     });
 
-    return products.sort((a, b) => a.slug.localeCompare(b.slug));
+    return products
+      .filter(
+        (product) =>
+          !PAYMENT_BROADCAST_EXCLUDED_PRODUCT_SLUGS.has(product.slug),
+      )
+      .sort((a, b) => a.slug.localeCompare(b.slug));
   }
 
   private async askPaymentBroadcastText(

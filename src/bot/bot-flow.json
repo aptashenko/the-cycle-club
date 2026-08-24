@@ -74,14 +74,6 @@
       "buttons": [
         [
           {
-            "text": "Присоединиться к The Cycle",
-            "activeText": "💳 Продлить подписку",
-            "action": "startPayment",
-            "productSlug": "the-cycle"
-          }
-        ],
-        [
-          {
             "text": "Перейти в клуб",
             "url": "https://telegram.me/+idivZ5snYSo1OTUy",
             "visible": "activeSubscription"
