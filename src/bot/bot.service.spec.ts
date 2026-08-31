@@ -158,7 +158,7 @@ describe('BotService support flow', () => {
     expect(attribution.attachTelegramUser).not.toHaveBeenCalled();
     expect(telegram.sendMessage).toHaveBeenCalledWith(
       123456,
-      expect.stringContaining('Ссылка на оплату будет действительна'),
+      expect.stringContaining('Закрытое образовательное комьюнити'),
       expect.objectContaining({
         inline_keyboard: [
           [

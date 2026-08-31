@@ -41,7 +41,7 @@ describe('BotFlowService', () => {
     );
 
     expect(service.getScreenText('the-cycle-today-offer')).toContain(
-      'Ссылка на оплату будет действительна до конца сегодняшнего дня.',
+      '2 сентября вход закрывается до следующего месяца',
     );
     expect(keyboard?.[0]?.[0]).toEqual({
       text: 'Оплатить 1499 грн',
