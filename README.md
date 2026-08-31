@@ -67,6 +67,7 @@ ADMIN_TELEGRAM_BOT_TOKEN=your_admin_bot_token
 MANAGER_TELEGRAM_ID=your_telegram_id
 MARATHON_CHANNEL_CHAT_ID=
 MARATHON_INVITE_EXPIRES_IN_SECONDS=
+THE_CYCLE_CLUB_CHAT_ID=
 KEYWORD_RESPONSE_WORD=
 PORT=3000
 ```
@@ -80,6 +81,19 @@ or chat with invite-user permissions, then set `MARATHON_CHANNEL_CHAT_ID`.
 `MARATHON_INVITE_EXPIRES_IN_SECONDS` is optional; when set, generated invite
 links expire after that many seconds. Each generated marathon invite link is
 limited to one join.
+
+The special The Cycle deep-link scenario is opened with:
+
+```text
+https://t.me/<TELEGRAM_BOT_USERNAME>?start=the_cycle_today
+```
+
+It sells `the-cycle-today-offer` for `1499.00 UAH`. After a successful payment,
+the bot creates a generated invite link limited to one join. The scenario and
+checkout are available only on the 1st day of each month in the `Europe/Paris`
+time zone; from 00:00 on the 2nd day, the bot shows an unavailable message. Set
+`THE_CYCLE_CLUB_CHAT_ID` to the club chat/channel ID; if it is empty, the bot
+falls back to `CLOSED_GROUP_CHAT_ID`.
 
 WayForPay variables can stay empty in `PAYMENT_MODE=mock`:
 

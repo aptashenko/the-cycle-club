@@ -14,6 +14,11 @@ import {
 } from '../common/enums';
 import { NotificationService } from '../notifications/notification.service';
 import { Product } from '../products/product.entity';
+import {
+  isTheCycleTodayOfferAvailable,
+  THE_CYCLE_TODAY_OFFER_SLUG,
+  THE_CYCLE_TODAY_OFFER_UNAVAILABLE_MESSAGE,
+} from '../products/the-cycle-today-offer';
 import { SubscriptionService } from '../subscriptions/subscription.service';
 import { UserActivityService } from '../user-activity/user-activity.service';
 import { User } from '../users/user.entity';
@@ -90,6 +95,10 @@ export class PaymentService {
       throw new BadRequestException('Payment attempt is not pending');
     }
 
+    if (this.isUnavailableTheCycleTodayOffer(paymentAttempt)) {
+      return this.renderUnavailableOfferPage();
+    }
+
     await this.activity.track(
       paymentAttempt.user,
       'payment',
@@ -111,6 +120,10 @@ export class PaymentService {
 
     if (paymentAttempt.status !== PaymentAttemptStatus.Pending) {
       throw new BadRequestException('Payment attempt is not pending');
+    }
+
+    if (this.isUnavailableTheCycleTodayOffer(paymentAttempt)) {
+      return this.renderUnavailableOfferPage();
     }
 
     await this.activity.track(
@@ -142,6 +155,12 @@ export class PaymentService {
   }
 
   async confirmMockPayment(id: string) {
+    const paymentAttempt = await this.findById(id);
+
+    if (this.isUnavailableTheCycleTodayOffer(paymentAttempt)) {
+      return this.renderUnavailableOfferPage();
+    }
+
     await this.confirmMockPaymentAttempt(id);
 
     return [
@@ -314,6 +333,34 @@ export class PaymentService {
 
   private isMockMode(): boolean {
     return this.config.get<string>('PAYMENT_MODE', 'wayforpay') === 'mock';
+  }
+
+  private isUnavailableTheCycleTodayOffer(
+    paymentAttempt: PaymentAttempt,
+  ): boolean {
+    return (
+      paymentAttempt.product.slug === THE_CYCLE_TODAY_OFFER_SLUG &&
+      !isTheCycleTodayOfferAvailable()
+    );
+  }
+
+  private renderUnavailableOfferPage(): string {
+    return [
+      '<!doctype html>',
+      '<html lang="ru">',
+      '<head>',
+      '<meta charset="utf-8">',
+      '<meta name="viewport" content="width=device-width, initial-scale=1">',
+      '<title>The Cycle - Offer unavailable</title>',
+      '<style>body{font-family:system-ui,sans-serif;max-width:520px;margin:48px auto;padding:0 16px;line-height:1.45;color:#1f2933}main{border:1px solid #e6e0d8;border-radius:14px;padding:28px;background:#fffaf4}h1{font-size:28px;line-height:1.15;margin:0 0 12px}p{margin:0;color:#667085}</style>',
+      '</head>',
+      '<body>',
+      '<main>',
+      '<h1>Предложение сейчас недоступно</h1>',
+      `<p>${this.escapeHtml(THE_CYCLE_TODAY_OFFER_UNAVAILABLE_MESSAGE)}</p>`,
+      '</main>',
+      '</body></html>',
+    ].join('');
   }
 
   private escapeHtml(value: string) {

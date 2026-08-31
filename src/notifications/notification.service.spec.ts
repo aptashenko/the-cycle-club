@@ -267,6 +267,90 @@ describe('NotificationService', () => {
     );
   });
 
+  it('sends a generated single-use invite link for paid The Cycle special offer', async () => {
+    const config = {
+      get: jest.fn((key: string, defaultValue?: string) => {
+        if (key === 'ADMIN_TELEGRAM_ID') {
+          return 'admin-chat-id';
+        }
+
+        if (key === 'THE_CYCLE_CLUB_CHAT_ID') {
+          return '-1009876543210';
+        }
+
+        return defaultValue;
+      }),
+    } as unknown as ConfigService;
+    const telegram = {
+      sendMessage: jest.fn().mockResolvedValue(undefined),
+      isBotBlockedByUser: jest.fn(() => false),
+    } as unknown as jest.Mocked<TelegramApiService>;
+    const adminTelegram = {
+      sendMessage: jest.fn().mockResolvedValue(undefined),
+    } as unknown as AdminTelegramApiService;
+    const flow = {
+      getPaymentSuccessMessage: jest.fn(() => 'payment success'),
+    } as unknown as BotFlowService;
+    const inviteLinks = {
+      createSingleUseInviteLink: jest.fn().mockResolvedValue({
+        inviteLink: 'https://t.me/+theCycleSingleUse',
+        memberLimit: 1,
+      }),
+    } as unknown as jest.Mocked<InviteLinksService>;
+    const users = {
+      markBotBlocked: jest.fn(),
+    } as unknown as jest.Mocked<UserService>;
+    const service = new NotificationService(
+      config,
+      telegram,
+      adminTelegram,
+      flow,
+      inviteLinks,
+      users,
+    );
+
+    await service.notifyPaymentSuccess({
+      id: 'payment-attempt-id',
+      amount: '1499.00',
+      currency: 'UAH',
+      paidAt: new Date('2026-07-01T12:00:00.000Z'),
+      provider: PaymentProvider.WayForPay,
+      providerOrderId: 'order-1',
+      providerTransactionId: 'tx-1',
+      product: {
+        slug: 'the-cycle-today-offer',
+        title: 'The Cycle',
+        type: ProductType.Subscription,
+        downloadFiles: [],
+      } as unknown as Product,
+      user: {
+        firstName: 'Jane',
+        lastName: 'Doe',
+        telegramId: 'user-chat-id',
+        username: 'jane',
+      } as User,
+    } as PaymentAttempt);
+
+    expect(inviteLinks.createSingleUseInviteLink).toHaveBeenCalledWith({
+      chatId: '-1009876543210',
+      name: 'the-cycle-today-offer:payment-atte',
+    });
+    expect(telegram.sendMessage).toHaveBeenCalledWith(
+      'user-chat-id',
+      expect.stringContaining('Доступ в The Cycle готов'),
+      {
+        inline_keyboard: [
+          [
+            {
+              text: 'Вступить в The Cycle ✅',
+              url: 'https://t.me/+theCycleSingleUse',
+            },
+          ],
+        ],
+      },
+    );
+  });
+
   it('sends consultation success message with assistant link', async () => {
     const config = {
       get: jest.fn((key: string, defaultValue?: string) =>

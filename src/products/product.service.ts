@@ -5,6 +5,7 @@ import { join } from 'path';
 import { Repository } from 'typeorm';
 import { ProductType } from '../common/enums';
 import { Product, ProductDownloadFile } from './product.entity';
+export { THE_CYCLE_TODAY_OFFER_SLUG } from './the-cycle-today-offer';
 
 export const THE_CYCLE_SLUG = 'the-cycle';
 

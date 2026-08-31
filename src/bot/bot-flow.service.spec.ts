@@ -27,6 +27,28 @@ describe('BotFlowService', () => {
     ]);
   });
 
+  it('builds the special The Cycle payment scenario', () => {
+    const keyboard = service.buildScreenInlineKeyboard(
+      'the-cycle-today-offer',
+      {
+        productsBySlug: {
+          'the-cycle-today-offer': {
+            price: '1499.00',
+            currency: 'UAH',
+          },
+        },
+      },
+    );
+
+    expect(service.getScreenText('the-cycle-today-offer')).toContain(
+      'Ссылка на оплату будет действительна до конца сегодняшнего дня.',
+    );
+    expect(keyboard?.[0]?.[0]).toEqual({
+      text: 'Оплатить 1499 грн',
+      callback_data: 'payment:start:the-cycle-today-offer',
+    });
+  });
+
   it('builds callbacks and link keyboard for live event registration', () => {
     const keyboard = service.buildScreenInlineKeyboard('webinar1');
 

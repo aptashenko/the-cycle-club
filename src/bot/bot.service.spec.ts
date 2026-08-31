@@ -50,6 +50,31 @@ describe('BotService support flow', () => {
     const notifications = {
       notifyProductAccessBySubscription: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<NotificationService>;
+    const products = {
+      getActiveProductBySlug: jest.fn().mockResolvedValue({
+        id: 'the-cycle-today-offer-id',
+        slug: 'the-cycle-today-offer',
+        title: 'The Cycle',
+        price: '1499.00',
+        currency: 'UAH',
+        type: ProductType.Subscription,
+        downloadFiles: [],
+        includedInSubscription: false,
+        isActive: true,
+      } as unknown as Product),
+    } as unknown as jest.Mocked<ProductService>;
+    const subscriptions = {
+      hasActiveSubscription: jest.fn().mockResolvedValue(false),
+    } as unknown as jest.Mocked<SubscriptionService>;
+    const payments = {
+      createWayForPayAttempt: jest.fn().mockResolvedValue({
+        id: 'payment-attempt-id',
+        provider: PaymentProvider.WayForPay,
+        amount: '1499.00',
+        currency: 'UAH',
+        paymentUrl: 'https://example.test/checkout',
+      }),
+    } as unknown as jest.Mocked<PaymentService>;
     const flow = new BotFlowService();
     const config = {
       get: jest.fn(
@@ -60,9 +85,9 @@ describe('BotService support flow', () => {
     const service = new BotService(
       telegram,
       users,
-      {} as ProductService,
-      {} as SubscriptionService,
-      {} as PaymentService,
+      products,
+      subscriptions,
+      payments,
       notifications,
       support,
       liveEvents,
@@ -80,10 +105,17 @@ describe('BotService support flow', () => {
       activity,
       notifications,
       attribution,
+      products,
+      subscriptions,
+      payments,
       flow,
       config,
     };
   };
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
 
   it('attaches telegram attribution from start payload', async () => {
     const { service, attribution } = buildService();
@@ -101,6 +133,60 @@ describe('BotService support flow', () => {
     expect(attribution.attachTelegramUser).toHaveBeenCalledWith(
       'abc123_X-y',
       user,
+    );
+  });
+
+  it('opens special The Cycle scenario from start payload', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-01T10:00:00.000Z'));
+
+    const { service, telegram, attribution } = buildService();
+
+    await service.handleUpdate({
+      update_id: 1,
+      message: {
+        message_id: 11,
+        from: { id: 123456, first_name: 'Jane' },
+        chat: { id: 123456, type: 'private' },
+        text: '/start the_cycle_today',
+      },
+    });
+
+    expect(attribution.attachTelegramUser).not.toHaveBeenCalled();
+    expect(telegram.sendMessage).toHaveBeenCalledWith(
+      123456,
+      expect.stringContaining('Ссылка на оплату будет действительна'),
+      expect.objectContaining({
+        inline_keyboard: [
+          [
+            {
+              text: 'Оплатить 1499 грн',
+              callback_data: 'payment:start:the-cycle-today-offer',
+            },
+          ],
+        ],
+      }),
+    );
+  });
+
+  it('does not open special The Cycle scenario after the first day', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-01T22:00:00.000Z'));
+
+    const { service, telegram, attribution } = buildService();
+
+    await service.handleUpdate({
+      update_id: 1,
+      message: {
+        message_id: 11,
+        from: { id: 123456, first_name: 'Jane' },
+        chat: { id: 123456, type: 'private' },
+        text: '/start the_cycle_today',
+      },
+    });
+
+    expect(attribution.attachTelegramUser).not.toHaveBeenCalled();
+    expect(telegram.sendMessage).toHaveBeenCalledWith(
+      123456,
+      'Ссылка будет доступна через месяц.',
     );
   });
 

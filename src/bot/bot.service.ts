@@ -8,7 +8,16 @@ import { LiveEventsService } from '../live-events/live-events.service';
 import { NotificationService } from '../notifications/notification.service';
 import { PaymentService } from '../payments/payment.service';
 import { Product } from '../products/product.entity';
-import { ProductService, THE_CYCLE_SLUG } from '../products/product.service';
+import {
+  ProductService,
+  THE_CYCLE_SLUG,
+  THE_CYCLE_TODAY_OFFER_SLUG,
+} from '../products/product.service';
+import {
+  isTheCycleTodayOfferAvailable,
+  THE_CYCLE_TODAY_OFFER_START_PAYLOAD,
+  THE_CYCLE_TODAY_OFFER_UNAVAILABLE_MESSAGE,
+} from '../products/the-cycle-today-offer';
 import { SubscriptionService } from '../subscriptions/subscription.service';
 import { SupportService } from '../support/support.service';
 import { UserActivityService } from '../user-activity/user-activity.service';
@@ -99,6 +108,28 @@ export class BotService {
     });
 
     if (isStartCommand || text === '\uD83D\uDE80 В начало') {
+      if (startPayload === THE_CYCLE_TODAY_OFFER_START_PAYLOAD) {
+        this.pendingSupportMessages.delete(user.id);
+        this.pendingConsultationPayments.delete(user.id);
+
+        if (!isTheCycleTodayOfferAvailable()) {
+          await this.telegram.sendMessage(
+            message.chat.id,
+            THE_CYCLE_TODAY_OFFER_UNAVAILABLE_MESSAGE,
+          );
+          await this.sendReplyKeyboard(message.chat.id);
+          return;
+        }
+
+        await this.sendFlowScreen(
+          message.chat.id,
+          user.id,
+          THE_CYCLE_TODAY_OFFER_SLUG,
+        );
+        await this.sendReplyKeyboard(message.chat.id);
+        return;
+      }
+
       if (startPayload) {
         await this.attribution.attachTelegramUser(startPayload, user);
       }
@@ -629,6 +660,17 @@ export class BotService {
     user: User,
     productSlug: string,
   ) {
+    if (
+      productSlug === THE_CYCLE_TODAY_OFFER_SLUG &&
+      !isTheCycleTodayOfferAvailable()
+    ) {
+      await this.telegram.sendMessage(
+        chatId,
+        THE_CYCLE_TODAY_OFFER_UNAVAILABLE_MESSAGE,
+      );
+      return;
+    }
+
     if (productSlug === THE_CYCLE_SLUG) {
       await this.sendTheCyclePaymentDisabledMessage(chatId);
       return;
@@ -744,12 +786,16 @@ export class BotService {
     userId: string,
     product: Product,
   ) {
+    if (
+      product.slug === THE_CYCLE_SLUG ||
+      product.slug === THE_CYCLE_TODAY_OFFER_SLUG ||
+      product.includedInSubscription
+    ) {
+      return this.hasActiveTheCycleSubscription(userId);
+    }
+
     const subscriptionProduct =
-      product.type === ProductType.Subscription
-        ? product
-        : product.includedInSubscription
-          ? await this.products.getActiveProductBySlug(THE_CYCLE_SLUG)
-          : null;
+      product.type === ProductType.Subscription ? product : null;
 
     if (!subscriptionProduct) {
       return false;
@@ -759,6 +805,27 @@ export class BotService {
       userId,
       subscriptionProduct.id,
     );
+  }
+
+  private async hasActiveTheCycleSubscription(userId: string) {
+    const subscriptionProducts = await Promise.all([
+      this.products.getActiveProductBySlug(THE_CYCLE_SLUG),
+      this.products.getActiveProductBySlug(THE_CYCLE_TODAY_OFFER_SLUG),
+    ]);
+
+    for (const subscriptionProduct of subscriptionProducts) {
+      const hasActiveSubscription =
+        await this.subscriptions.hasActiveSubscription(
+          userId,
+          subscriptionProduct.id,
+        );
+
+      if (hasActiveSubscription) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private canOpenProductBySubscription(
@@ -776,8 +843,20 @@ export class BotService {
     chatId: string | number,
     paymentAttemptId: string,
   ) {
-    await this.payments.confirmMockPaymentAttempt(paymentAttemptId);
     const paymentAttempt = await this.payments.findById(paymentAttemptId);
+
+    if (
+      paymentAttempt.product.slug === THE_CYCLE_TODAY_OFFER_SLUG &&
+      !isTheCycleTodayOfferAvailable()
+    ) {
+      await this.telegram.sendMessage(
+        chatId,
+        THE_CYCLE_TODAY_OFFER_UNAVAILABLE_MESSAGE,
+      );
+      return;
+    }
+
+    await this.payments.confirmMockPaymentAttempt(paymentAttemptId);
     await this.activity.track(
       paymentAttempt.user,
       'payment',

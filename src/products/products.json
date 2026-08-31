@@ -10,6 +10,16 @@
     "isActive": true
   },
   {
+    "slug": "the-cycle-today-offer",
+    "title": "The Cycle",
+    "description": "Специальный доступ в женский клуб The Cycle.",
+    "price": "1499.00",
+    "currency": "UAH",
+    "type": "subscription",
+    "downloadFiles": [],
+    "isActive": true
+  },
+  {
     "slug": "marathon-4",
     "title": "Марафон по детоксу - 4 поток",
     "description": "Четвертый поток марафона по детоксу.",

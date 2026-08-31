@@ -6,6 +6,7 @@ import { ProductType } from '../common/enums';
 import { InviteLinksService } from '../invite-links/invite-links.service';
 import { PaymentAttempt } from '../payments/payment-attempt.entity';
 import { Product } from '../products/product.entity';
+import { THE_CYCLE_TODAY_OFFER_SLUG } from '../products/the-cycle-today-offer';
 import { Subscription } from '../subscriptions/subscription.entity';
 import { SupportRequest } from '../support/support-request.entity';
 import { User } from '../users/user.entity';
@@ -16,6 +17,7 @@ const RESOLVE_SUPPORT_PREFIX = 'support:resolve:';
 const MARATHON_PRODUCT_SLUG = 'marathon-4';
 const MARATHON_CHANNEL_CHAT_ID = 'MARATHON_CHANNEL_CHAT_ID';
 const MARATHON_INVITE_EXPIRES_IN_SECONDS = 'MARATHON_INVITE_EXPIRES_IN_SECONDS';
+const THE_CYCLE_CLUB_CHAT_ID = 'THE_CYCLE_CLUB_CHAT_ID';
 const ASSISTANT_TELEGRAM_ID = '7522999600';
 const ASSISTANT_TELEGRAM_URL = 'https://telegram.me/assistant_nicolaeva';
 
@@ -55,8 +57,9 @@ export class NotificationService {
       );
     }
 
+    await this.sendGeneratedAccessLinks(paymentAttempt);
+
     if (!isSubscriptionProduct) {
-      await this.sendGeneratedAccessLinks(paymentAttempt);
       await this.sendDownloadLinks(paymentAttempt);
     }
 
@@ -229,6 +232,11 @@ export class NotificationService {
   }
 
   private async sendGeneratedAccessLinks(paymentAttempt: PaymentAttempt) {
+    if (paymentAttempt.product.slug === THE_CYCLE_TODAY_OFFER_SLUG) {
+      await this.sendTheCycleInviteLink(paymentAttempt);
+      return;
+    }
+
     if (paymentAttempt.product.slug !== MARATHON_PRODUCT_SLUG) {
       return;
     }
@@ -282,6 +290,71 @@ export class NotificationService {
       await this.sendAdminMessage(
         [
           '⚠️ <b>Не удалось создать ссылку марафона</b>',
+          '',
+          `<b>Ошибка:</b> ${this.escape(message)}`,
+          '',
+          '<b>Пользователь:</b>',
+          this.formatUser(paymentAttempt.user),
+          '',
+          '<b>ID:</b>',
+          paymentAttempt.user.telegramId,
+        ].join('\n'),
+      );
+    }
+  }
+
+  private async sendTheCycleInviteLink(paymentAttempt: PaymentAttempt) {
+    const clubChatId =
+      this.config.get<string>(THE_CYCLE_CLUB_CHAT_ID) ||
+      this.config.get<string>('CLOSED_GROUP_CHAT_ID');
+
+    if (!clubChatId) {
+      await this.sendAdminMessage(
+        [
+          '⚠️ <b>Не удалось отправить ссылку The Cycle</b>',
+          '',
+          `Не задан <code>${THE_CYCLE_CLUB_CHAT_ID}</code> или <code>CLOSED_GROUP_CHAT_ID</code>.`,
+          '',
+          '<b>Пользователь:</b>',
+          this.formatUser(paymentAttempt.user),
+          '',
+          '<b>ID:</b>',
+          paymentAttempt.user.telegramId,
+        ].join('\n'),
+      );
+      return;
+    }
+
+    try {
+      const invite = await this.inviteLinks.createSingleUseInviteLink({
+        chatId: clubChatId,
+        name: this.buildInviteLinkName(paymentAttempt),
+      });
+
+      await this.sendUserMessage(
+        paymentAttempt.user,
+        [
+          'Доступ в The Cycle готов ✅',
+          '',
+          'Ссылка индивидуальная и рассчитана только на одно вступление.',
+        ].join('\n'),
+        {
+          inline_keyboard: [
+            [
+              {
+                text: 'Вступить в The Cycle ✅',
+                url: invite.inviteLink,
+              },
+            ],
+          ],
+        },
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to create The Cycle invite link: ${message}`);
+      await this.sendAdminMessage(
+        [
+          '⚠️ <b>Не удалось создать ссылку The Cycle</b>',
           '',
           `<b>Ошибка:</b> ${this.escape(message)}`,
           '',
