@@ -12,6 +12,7 @@ import { UserActivityService } from '../user-activity/user-activity.service';
 import { User } from '../users/user.entity';
 import { UserService } from '../users/user.service';
 import { TelegramApiService } from '../notifications/telegram-api.service';
+import * as TheCycleTodayOffer from '../products/the-cycle-today-offer';
 import { BotFlowService } from './bot-flow.service';
 import { BotService } from './bot.service';
 
@@ -114,6 +115,7 @@ describe('BotService support flow', () => {
   };
 
   afterEach(() => {
+    jest.restoreAllMocks();
     jest.useRealTimers();
   });
 
@@ -137,7 +139,9 @@ describe('BotService support flow', () => {
   });
 
   it('opens special The Cycle scenario from start payload', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2026-09-01T10:00:00.000Z'));
+    jest
+      .spyOn(TheCycleTodayOffer, 'isTheCycleTodayOfferAvailable')
+      .mockReturnValue(true);
 
     const { service, telegram, attribution } = buildService();
 
@@ -166,10 +170,17 @@ describe('BotService support flow', () => {
         ],
       }),
     );
+    expect(telegram.sendMessage).not.toHaveBeenCalledWith(
+      123456,
+      'Основное меню доступно внизу ❤️',
+      expect.anything(),
+    );
   });
 
   it('does not open special The Cycle scenario after the first day', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2026-09-01T22:00:00.000Z'));
+    jest
+      .spyOn(TheCycleTodayOffer, 'isTheCycleTodayOfferAvailable')
+      .mockReturnValue(false);
 
     const { service, telegram, attribution } = buildService();
 
@@ -187,6 +198,11 @@ describe('BotService support flow', () => {
     expect(telegram.sendMessage).toHaveBeenCalledWith(
       123456,
       'Ссылка будет доступна через месяц.',
+    );
+    expect(telegram.sendMessage).not.toHaveBeenCalledWith(
+      123456,
+      'Основное меню доступно внизу ❤️',
+      expect.anything(),
     );
   });
 

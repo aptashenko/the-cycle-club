@@ -117,7 +117,6 @@ export class BotService {
             message.chat.id,
             THE_CYCLE_TODAY_OFFER_UNAVAILABLE_MESSAGE,
           );
-          await this.sendReplyKeyboard(message.chat.id);
           return;
         }
 
@@ -126,7 +125,6 @@ export class BotService {
           user.id,
           THE_CYCLE_TODAY_OFFER_SLUG,
         );
-        await this.sendReplyKeyboard(message.chat.id);
         return;
       }
 

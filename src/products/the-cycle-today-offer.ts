@@ -10,5 +10,5 @@ export function isTheCycleTodayOfferAvailable(now = new Date()): boolean {
     timeZone: THE_CYCLE_TODAY_OFFER_TIME_ZONE,
   }).format(now);
 
-  return day === '31';
+  return Number(day) === 31;
 }
